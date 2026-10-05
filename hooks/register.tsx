@@ -610,6 +610,13 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // A turn without a typed prompt (a background agent's notice, a continuation) raises no
+  // prompt.submit: without this Claude kept fishing and dozing through the whole turn.
+  on('turn.start', async ($, e, next) => {
+    if ((await read($, hero)).mode !== 'working') await begin($, e.text)
+    return next(e)
+  })
+
   on('session.measure', async ($, e, next) => {
     await update($, context, () => e.context.percent ?? null)
     await update($, limits, () => readLimits(e.rateLimits))
@@ -643,6 +650,8 @@ export const register: Register = on => {
     const egg = eggs[0] ? eggBeat(eggs[0], command) : null
     const b = egg ?? beat(e.tool, args, seed)
     const asks = e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode'
+    // A main-loop call means Claude is working, whatever the band missed.
+    if (!owner && (await read($, hero)).mode !== 'working') await begin($)
     if (owner) await workerBeat($, owner, b.action, false)
     else await heroBeat($, b, 1, egg?.emote)
     if (eggs.includes('sl')) await addFx($, 'train', 0)

@@ -450,6 +450,28 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/has reset/)).toBeDefined()
   })
 
+  test(`a turn with no typed prompt still wakes Claude, and so does a stray tool call (${surface})`, async ($, on) => {
+    const clock = world(on)
+    on('turn.start', (_, e) => ({ turnId: e.turnId }) as never)
+    on('turn.complete', () => ({ text: '' }) as never)
+    on('tool.call', () => ({ result: { stdout: 'ok', stderr: '' }, text: 'ok' }) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    const see = async (text: RegExp) => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    await $.turn.start({ text: '', turnId: 't1' } as never)
+    expect(await see(/set out/)).toBeDefined() // the mock clock's day may be a holiday
+    await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+    await clock.advance(30_000) // resting, fishing by now
+    expect(await see(/casts a line/)).toBeDefined()
+    await $.tool.call({ tool: 'Read', file_path: '/a/notes.md', tool_use_id: 'r1' } as never)
+    expect(await see(/notes\.md/)).toBeDefined()
+    expect(await see(/casts a line/)).toBe(undefined)
+  })
+
   test(`a permission dialog makes Claude call for you, an auto-settled ask does not (${surface})`, async ($, on) => {
     world(on)
     on('tool.check', () => ({ decision: 'ask' }))

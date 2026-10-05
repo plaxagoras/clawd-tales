@@ -12,6 +12,10 @@ Glance down and you know what Claude is doing. A red `!` and a jumping Clawd mea
 
 Every tool call gets a pose and a one-line caption. Claude reads a book for `Read`, digs for `Edit`, sneaks for `Grep`, runs for `Bash`, flies for web search. Subagents walk in as their own critters, colored by model.
 
+### A minute in the band
+
+You ask Claude to fix a failing test. Clawd runs off to `pytest` and three bugs drop onto the ground. It reads the test file with a book open, then digs into the code. A red `!` appears and Clawd jumps: Claude wants to run a command. You approve within a few seconds, and Clawd beams with hearts. The tests go green, Clawd eats all three bugs, and a turn that long ends in a dance.
+
 ## What it shows
 
 | Happening in Claude Code | In the band |
@@ -57,7 +61,7 @@ The band shrinks with your terminal: the full band at 8 rows, no sky at 6, then 
 
 ## Install
 
-Needs a Claude Code build with mods (function hooks). Built and tested on 2.1.289. If the band never appears, your build may not support mods yet.
+Needs a Claude Code build with mods (function hooks). Built and tested on 2.1.289; run `claude --version` to see yours. After installing, start a new session and type `/`: if `/tales` isn't in the list, the mod didn't load, and your build probably doesn't support mods yet.
 
 ```sh
 claude plugin marketplace add plaxagoras/clawd-tales

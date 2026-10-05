@@ -1,0 +1,17 @@
+{
+  "name": "clawd-tales",
+  "owner": { "name": "plaxagoras" },
+  "metadata": {
+    "description": "clawd-tales: a pixel Clawd that acts out what Claude Code is doing, in the terminal",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "clawd-tales",
+      "source": "./",
+      "description": "A pixel Clawd acts out every tool call above the prompt. Helpers wander in tinted by model, failing tests drop bugs, todos become pellets, context fill is weather. No model calls.",
+      "category": "fun",
+      "tags": ["mod", "pet", "pixel-art", "terminal", "subagents"]
+    }
+  ]
+}

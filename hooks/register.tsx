@@ -463,9 +463,13 @@ export const register: Register = on => {
     )
     const below = await next(e)
 
-    // Degradation ladder: full stage, then stage without sky or roster, then one line, then nothing.
+    // Degradation ladder: full stage, then stage without sky or roster, then stage without its
+    // caption (a fullscreen split pane leaves ~5 rows), then one line, then nothing. A call for
+    // the person keeps its caption and gives up stage instead.
     if (rows < 1) return below
-    if (rows < 6 || cols < 30) {
+    const captionRows = asking || rows >= 6 ? 1 : 0
+    const room = rows - captionRows
+    if (room < 4 || cols < 30) {
       return (
         <Box flexDirection="column">
           <Box flexDirection="row">
@@ -480,15 +484,15 @@ export const register: Register = on => {
     const task = await read($, todos)
     const extras = { weather: weatherOf(await read($, context)), bugs: await read($, bugs), todos: task }
     const all = lines(stage(shown, crew, f, cols, extras))
-    const full = rows >= 8
-    const stageLines = full ? all : all.slice(1)
+    // Standing Claude reaches the second line; only the alert crop cuts into him.
+    const stageLines = all.slice(rows >= 8 ? 0 : Math.min(2, Math.max(1, all.length - room)))
     const ctx = await read($, context)
     const gauges = [
       ...(ctx === null ? [] : [{ label: 'ctx', percent: Math.round(ctx) }]),
       ...(await read($, limits)).map(l => ({ label: l.kind, percent: l.percent })),
     ]
     const tone = (p: number) => (p >= 95 ? '#e5534b' : p >= 80 ? '#e0b84c' : undefined)
-    const hasRoom = rows >= stageLines.length + 2
+    const hasRoom = rows >= stageLines.length + captionRows + 1
     const roster =
       !hasRoom || (crew.length === 0 && !task && gauges.length === 0) ? null : (
         <Box flexDirection="row">
@@ -518,7 +522,7 @@ export const register: Register = on => {
             ))}
           </Box>
         ))}
-        {caption}
+        {captionRows ? caption : null}
         {roster}
         {below}
       </Box>

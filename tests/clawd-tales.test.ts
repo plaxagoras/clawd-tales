@@ -95,6 +95,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/Claude .*register\.tsx/)).toBeDefined()
     expect(await see('engine band')).toBeDefined()
     expect(await see(/0\/5 tasks/)).toBeDefined()
+    // A fullscreen split pane leaves ~5 rows: the stage stays, the caption goes.
+    const short = { ...PROPS, maxRows: 5 }
+    expect(await see(/[▀▄]/, short)).toBeDefined()
+    expect(await see(/Claude .*register\.tsx/, short)).toBe(undefined)
 
     await clock.advance(5000) // 10 s
     expect(await see(/Review the diff/)).toBeDefined()
@@ -106,6 +110,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/Claude needs you/)).toBeDefined()
     // Short band: one line, still says what it needs.
     expect(await see(/Claude needs you/, { ...PROPS, maxRows: 3 })).toBeDefined()
+    // Split pane: a call for you keeps its caption over a cropped stage.
+    expect(await see(/Claude needs you/, { ...PROPS, maxRows: 5 })).toBeDefined()
+    expect(await see(/[▀▄]/, { ...PROPS, maxRows: 5 })).toBeDefined()
 
     await clock.advance(5000) // 23.5 s
     expect(await see(/3\/5 tasks/)).toBeDefined()

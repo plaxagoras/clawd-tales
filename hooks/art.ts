@@ -50,196 +50,79 @@ const PALETTE: Record<string, string> = {
 
 type Sprite = readonly string[]
 
-const LEGS_A = '..o.o...o.o..'
-const LEGS_B = '...o.o.o.o...'
+// 9 pixels wide, 5 tall: body columns 1-7, arms at 0 and 8, four legs.
+const LEGS_A = '.o.o.o.o.'
+const LEGS_B = '..o.o.o.o'
 
-const STAND: Sprite = [
-  '..ooooooooo..',
-  '..ooooooooo..',
-  '..okoooooko..',
-  '..okoooooko..',
-  'ooooooooooooo',
-  'ooooooooooooo',
-  '..ooooooooo..',
-  LEGS_A,
-  LEGS_A,
-]
-const STRIDE: Sprite = [...STAND.slice(0, 7), LEGS_B, '..o..o...o.o.']
+const HEAD = '.ooooooo.'
+const EYES = '.okoooko.'
+const ARMS = 'ooooooooo'
 
-const CHEER: Sprite = [
-  'o.ooooooooo.o',
-  'o.ooooooooo.o',
-  'ooo.ooooo.ooo',
-  '..okoooooko..',
-  '..ooooooooo..',
-  '..ooooooooo..',
-  '..ooooooooo..',
-  LEGS_A,
-  LEGS_A,
-]
+const STAND: Sprite = [HEAD, EYES, ARMS, HEAD, LEGS_A]
+const STRIDE: Sprite = [HEAD, EYES, ARMS, HEAD, LEGS_B]
+
+const CHEER: Sprite = ['o.......o', ARMS, EYES, HEAD, LEGS_A]
 
 /** Arms up and a red "!" beside the head: something needs the user. */
-const ALERT: Sprite = [
-  'o.ooooooooo.o.rr',
-  'o.ooooooooo.o.rr',
-  'ooookoooookoo.rr',
-  '..okoooooko...rr',
-  '..ooooooooo.....',
-  '..ooooooooo...rr',
-  '..ooooooooo.....',
-  LEGS_A,
-  LEGS_A,
-]
+const ALERT: Sprite = ['o.......o.r', 'ooooooooo.r', '.okoooko..r', HEAD, '.o.o.o.o..r']
 
-const SIT: Sprite = [
-  '..ooooooooo..',
-  '..ooooooooo..',
-  '..okoooooko..',
-  '..okoooooko..',
-  'ooooooooooooo',
-  'ooooooooooooo',
-  '.ooooooooooo.',
-]
-
-const BLINK: Sprite = [SIT[0] ?? '', SIT[1] ?? '', '..ooooooooo..', '..kkoooookk..', ...SIT.slice(4)]
-
-const YAWN: Sprite = [
-  '..ooooooooo..',
-  '..ooooooooo..',
-  '..kkoooookk..',
-  '..ooookoooo..',
-  'oooookkkooooo',
-  'ooooooooooooo',
-  '.ooooooooooo.',
-]
-
-const SLEEP: Sprite = [
-  '..ooooooooo..',
-  '..kkoooookk..',
-  '.ooooooooooo.',
-  'ooooooooooooo',
-  '.ooooooooooo.',
-]
+const SIT: Sprite = [HEAD, EYES, ARMS, HEAD]
+const BLINK: Sprite = [HEAD, HEAD, ARMS, HEAD]
+const YAWN: Sprite = [HEAD, '.kkoookk.', 'ooookoooo', HEAD]
+const SLEEP: Sprite = ['..ooooo..', '.kkoookk.', ARMS]
 
 /** Seated poses for the rest-time fidgets. */
 const WAVE: Sprite[] = [
-  ['..ooooooooo.o', '..ooooooooo.o', '..okoooooko.o', '..okoooooko.o', 'oooooooooooo.', 'oooooooooooo.', '.ooooooooooo.'],
-  ['..ooooooooo..o', '..ooooooooo.o.', '..okoooooko.o.', '..okoooooko.o.', 'oooooooooooo..', 'oooooooooooo..', '.ooooooooooo..'],
+  ['.ooooooo.o', '.okoooko.o', 'oooooooo.', HEAD],
+  ['.ooooooo..o', '.okoooko.o', 'oooooooo.', HEAD],
 ]
 const SCRATCH: Sprite[] = [
-  ['o.ooooooooo..', 'o.ooooooooo..', 'oookoooooko..', '..okoooooko..', '..ooooooooooo', '..ooooooooooo', '.ooooooooooo.'],
-  ['.oooooooooo..', 'o.ooooooooo..', 'o.okoooooko..', 'oookoooooko..', '..ooooooooooo', '..ooooooooooo', '.ooooooooooo.'],
+  ['oooooooo.', EYES, '.oooooooo', HEAD],
+  [HEAD, 'ookoooko.', '.oooooooo', HEAD],
 ]
 const LOOK: Sprite[] = [
-  ['..ooooooooo..', '..ooooooooo..', '..kooooooko..', '..kooooooko..', 'ooooooooooooo', 'ooooooooooooo', '.ooooooooooo.'],
-  ['..ooooooooo..', '..ooooooooo..', '..ookoooooko.', '..ookoooooko.', 'ooooooooooooo', 'ooooooooooooo', '.ooooooooooo.'],
+  [HEAD, '.koookoo.', ARMS, HEAD],
+  [HEAD, '.ookoook.', ARMS, HEAD],
 ]
 /** Paws over the eyes, knees knocking: rm -rf. */
 const COVER: Sprite[] = [
-  ['..ooooooooo..', '..ooooooooo..', '.ooooooooooo.', '.ooooooooooo.', '..ooooooooo..', '..ooooooooo..', '..ooooooooo..', '...o.o.o.o...', '...o.o.o.o...'],
-  ['..ooooooooo..', '..ooooooooo..', '.ooooooooooo.', '.ooooooooooo.', '..ooooooooo..', '..ooooooooo..', '..ooooooooo..', '..o.o...o.o..', '..o.o...o.o..'],
+  [HEAD, ARMS, HEAD, HEAD, LEGS_A],
+  [HEAD, ARMS, HEAD, HEAD, '.oo...oo.'],
 ]
 
 const READ: Sprite[] = [
-  [
-    '..ooooooooo......',
-    '..ooooooooo......',
-    '..okoooooko......',
-    '..okoooooko.BBBb.',
-    'ooooooooooooBBBb.',
-    'oooooooooooobBBb.',
-    '..ooooooooo.bbbb.',
-    LEGS_A,
-    LEGS_A,
-  ],
-  [
-    '..ooooooooo......',
-    '..ooooooooo......',
-    '..ooooooooo......', // blink
-    '..okoooooko.BBBb.',
-    'ooooooooooooBbBb.',
-    'oooooooooooobbBb.',
-    '..ooooooooo.bbbb.',
-    LEGS_A,
-    LEGS_A,
-  ],
+  [HEAD, '.okoooko.BBb', 'ooooooooobBb', '.ooooooo.bbb', LEGS_A],
+  [HEAD, '.ooooooo.BBb', 'ooooooooobbB', '.ooooooo.bbb', LEGS_A], // blink, page turns
 ]
 
 const DIG: Sprite[] = [
-  [
-    '..ooooooooo....m.',
-    '..ooooooooo...s..',
-    '..okoooooko..s...',
-    '..okoooooko.s....',
-    'ooooooooooooo....',
-    'ooooooooooooo....',
-    '..ooooooooo......',
-    LEGS_A,
-    LEGS_A,
-  ],
-  [
-    '..ooooooooo...d..',
-    '..ooooooooo.d...d',
-    '..okoooooko......',
-    '..okoooooko......',
-    'ooooooooooooos...',
-    'ooooooooooooo.s..',
-    '..ooooooooo....s.',
-    '..o.o...o.o....mm',
-    '..o.o...o.o....mm',
-  ],
+  ['.ooooooo...m', '.okoooko..s.', 'ooooooooos..', HEAD, LEGS_A],
+  ['.ooooooo.d.d', EYES, 'ooooooooos..', '.ooooooo..s.', '.o.o.o.o..mm'],
 ]
 
 const FLY: Sprite[] = [
-  [
-    'ww.........ww',
-    '.wooooooooow.',
-    '..ooooooooo..',
-    '..okoooooko..',
-    '..okoooooko..',
-    '.ooooooooooo.',
-    '..ooooooooo..',
-    '...o.....o...',
-  ],
-  [
-    '.............',
-    '..ooooooooo..',
-    '..ooooooooo..',
-    '..okoooooko..',
-    'w.okoooooko.w',
-    'wwoooooooooww',
-    'w.ooooooooo.w',
-    '...o.....o...',
-  ],
+  ['w.......w', 'wooooooow', EYES, HEAD, '..o...o..'],
+  ['.........', HEAD, EYES, 'wooooooow', 'w.o...o.w'],
 ]
 
-const CARRY_TOP: Sprite = [
-  '..yyyyyyyyy..',
-  '..ysyyyyysy..',
-  'o.yyyyyyyyy.o',
-  'o.ooooooooo.o',
-  'o.ooooooooo.o',
-  'ooookoooookoo',
-  '..okoooooko..',
-  '..ooooooooo..',
-  '..ooooooooo..',
-]
+const CARRY_TOP: Sprite = ['.yyyyyyy.', 'oysyyysyo', 'ooooooooo', EYES, HEAD]
 const CARRY: Sprite[] = [
-  [...CARRY_TOP, LEGS_A, LEGS_A],
-  [...CARRY_TOP, LEGS_B, '..o..o...o.o.'],
+  [...CARRY_TOP, LEGS_A],
+  [...CARRY_TOP, LEGS_B],
 ]
 
 const SNEAK: Sprite[] = [
-  ['..ooooooooo..', '..okoooooko..', 'ooooooooooooo', 'ooooooooooooo', '..ooooooooo..', LEGS_A],
-  ['..ooooooooo..', '..okoooooko..', 'ooooooooooooo', 'ooooooooooooo', '..ooooooooo..', LEGS_B],
+  [HEAD, EYES, ARMS, LEGS_A],
+  [HEAD, EYES, ARMS, LEGS_B],
 ]
 
+/** Flat on its back, legs up, stars circling. */
 const TRIP: Sprite[] = [
-  ['.z.....z.....', '..z...z......', '...o.o..o.o..', '...o.o..o.o..', '.ooooooooooo.', 'ookoooooookoo', '.ooooooooooo.'],
-  ['..z...z......', '.z.....z.....', '...o.o..o.o..', '...o.o..o.o..', '.ooooooooooo.', 'ookoooooookoo', '.ooooooooooo.'],
+  ['.z...z...', LEGS_A, HEAD, ARMS, '.okoooko.'],
+  ['z.....z..', LEGS_B, HEAD, ARMS, '.okoooko.'],
 ]
 
-const UMBRELLA: Sprite = ['...UUUUUUU...', '.UUUUUUUUUUU.', 'U.....s.....U']
+const UMBRELLA: Sprite = ['..UUUUU..', '.UUUUUUU.', 'U...s...U']
 const HEART: Sprite = ['q.q', '.q.']
 const ZED: Sprite = ['ww', '.w', 'ww']
 const BUG: Sprite[] = [
@@ -313,7 +196,7 @@ export function speed(action: Action): number {
   }
 }
 
-export const HERO_W = 17
+export const HERO_W = 13
 export const STAGE_ROWS = 12 // pixel rows: 6 terminal lines
 const GROUND = STAGE_ROWS - 1
 
@@ -409,14 +292,15 @@ function critter(grid: string[][], action: Action, x: number, dir: 1 | -1, frame
   return top
 }
 
-/** Hats are 13 wide, the body's width, sitting on the two pixel rows above the head. */
+/** Hats are the body's width (9), sitting on the pixel rows just above the head. */
 const HATS: Record<Hat, Sprite> = {
-  witch: ['.....AAA.....', 'AAAAAzzzAAAAA'],
-  santa: ['....rrrrrW...', '..WWWWWWWWW..'],
-  party: ['......z......', '.....qbq.....'],
-  nightcap: ['..bbbbbbbbbw.', '..WWWWWWWWW..'],
-  crown: ['..z.z.z.z.z..', '..zzzzzzzzz..'],
+  witch: ['....A....', '...AAA...', 'AAAzzzAAA'],
+  santa: ['.....rW..', '..rrrr...', '.WWWWWWW.'],
+  party: ['....z....', '...qbq...', '..bqbqb..'],
+  nightcap: ['......bw.', '..bbbbb..', '.WWWWWWW.'],
+  crown: ['.z.z.z.z.', '.zzzzzzz.'],
 }
+const BODY_W = 9
 
 /** The thought bubble, dots filling in. */
 function bubble(frame: number): Sprite {
@@ -488,14 +372,14 @@ function effect(grid: string[][], fx: Fx, now: number, frame: number, cols: numb
       for (let n = 0; n < 14; n++) {
         // Bursts out over the head, then flutters down.
         const vx = ((n * 37) % 13) - 6
-        const x = Math.round(fx.x + 8 + vx * (0.6 + t * 2.5))
-        const y = Math.round(((n * 5) % 3) - 1 + t * t * 11)
+        const x = Math.round(fx.x + 4 + vx * (0.6 + t * 2.5))
+        const y = Math.round(((n * 5) % 3) + 2 + t * t * 8)
         paint(grid, [CONFETTI[n % CONFETTI.length] ?? 'z'], x, y)
       }
       return
     case 'plane': {
-      const x = Math.round(fx.x + 12 + t * (cols + 10))
-      const y = Math.round(5 - t * 5 + Math.sin(t * 12) * 1.5)
+      const x = Math.round(fx.x + 8 + t * (cols + 10))
+      const y = Math.round(6 - t * 6 + Math.sin(t * 12) * 1.5)
       paint(grid, PLANE, x, y)
       return
     }
@@ -581,21 +465,21 @@ function snow(grid: string[][], cols: number, frame: number) {
 function emote(grid: string[][], kind: Emote, x: number, dir: 1 | -1, top: number, frame: number) {
   switch (kind) {
     case 'think': {
-      // Clear of a hat brim (13 wide) on the side Claude faces.
+      // Clear of a hat brim on the side Claude faces.
       const art = bubble(frame)
-      paint(grid, dir > 0 ? art : art.map(r => r.split('').reverse().join('')), dir > 0 ? x + 14 : x - 4, top - 2)
+      paint(grid, dir > 0 ? art : art.map(r => r.split('').reverse().join('')), dir > 0 ? x + 10 : x - 4, top - 3)
       return
     }
     case 'blush':
-      paint(grid, ['q'], x + (dir > 0 ? 2 : 6), top + 4)
-      paint(grid, ['q'], x + (dir > 0 ? 10 : 14), top + 4)
-      paint(grid, HEART, dir > 0 ? x + 13 : x + 1, top - (Math.floor(frame / 3) % 2))
+      paint(grid, ['q'], x + (dir > 0 ? 1 : 5), top + 2)
+      paint(grid, ['q'], x + (dir > 0 ? 7 : 11), top + 2)
+      paint(grid, HEART, dir > 0 ? x + 9 : x + 1, top - 1 - (Math.floor(frame / 3) % 2))
       return
     case 'sweat':
-      paint(grid, DROP, dir > 0 ? x + 11 : x + 5, top + (Math.floor(frame / 3) % 3))
+      paint(grid, DROP, dir > 0 ? x + 8 : x + 4, top - 1 + (Math.floor(frame / 3) % 3))
       return
     case 'butterfly': {
-      const bx = x + 6 + Math.round(Math.sin(frame / 3) * 7)
+      const bx = x + 4 + Math.round(Math.sin(frame / 3) * 6)
       const by = Math.max(0, top - 2 + Math.round(Math.cos(frame / 2)))
       paint(grid, BUTTERFLY[frame % 2] ?? [], bx, by)
       return
@@ -650,11 +534,11 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
     const top = critter(grid, w.action, w.x, w.dir, f, body)
     if (w.state === 'done' && w.sad) {
       // Claude's paw pats the head of a helper that didn't make it.
-      paint(grid, ['ooo'], Math.round(w.x) + 5, Math.max(0, top - 1 - (Math.floor(f / 2) % 2)))
-      paint(grid, HEART, Math.round(w.x) + 10, Math.max(0, top - 2))
+      paint(grid, ['ooo'], Math.round(w.x) + 3, Math.max(0, top - 1 - (Math.floor(f / 2) % 2)))
+      paint(grid, HEART, Math.round(w.x) + 8, Math.max(0, top - 2))
     } else if (w.state === 'done') {
       const rise = Math.floor(f / 3) % 2
-      paint(grid, HEART, Math.round(w.x) + 5, Math.max(0, top - 2 - rise))
+      paint(grid, HEART, Math.round(w.x) + 3, Math.max(0, top - 2 - rise))
     }
   })
 
@@ -663,29 +547,29 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   const x = Math.round(hero.x)
   const top = critter(grid, hero.action, hero.x, face, frame, extras.shiny ? 'n' : undefined)
   if (extras.shiny && frame % 6 < 3) {
-    paint(grid, ['z'], x + ((frame * 5) % 14), Math.max(0, top - 1))
-    paint(grid, ['W'], x + ((frame * 11 + 7) % 14), top + 3)
+    paint(grid, ['z'], x + ((frame * 5) % 10), Math.max(0, top - 1))
+    paint(grid, ['W'], x + ((frame * 11 + 7) % 10), top + 2)
   }
   const wearsHat = extras.hat && hero.action !== 'trip' && !(wet === 'rain' || wet === 'storm')
   if (wearsHat && extras.hat) {
     const hat = HATS[extras.hat]
-    paint(grid, face > 0 ? hat : hat.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - 13, top - 2)
+    paint(grid, face > 0 ? hat : hat.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - BODY_W, top - hat.length)
   }
   if (wet === 'rain' || wet === 'storm') paint(grid, UMBRELLA, x, Math.max(0, top - 3))
   if (hero.action === 'sleep') {
     if (Math.floor(frame / 15) % 2 === 1) {
-      paint(grid, dream(hero.last), x + 10, 0)
+      paint(grid, dream(hero.last), x + 7, Math.max(0, top - 7))
     } else {
-      const zx = x + 11 + (Math.floor(frame / 5) % 3)
+      const zx = x + 8 + (Math.floor(frame / 5) % 3)
       paint(grid, ZED, zx, Math.max(0, top - 3 - (Math.floor(frame / 5) % 2)))
     }
   }
   if (extras.late && (hero.action === 'sit' || hero.action === 'look' || hero.action === 'scratch' || hero.action === 'wave')) {
-    paint(grid, MUG[Math.floor(frame / 3) % 2] ?? [], face > 0 ? x + 14 : x - 2, GROUND - 4)
+    paint(grid, MUG[Math.floor(frame / 3) % 2] ?? [], face > 0 ? x + 10 : x - 1, GROUND - 4)
   }
   if (hero.emote) emote(grid, hero.emote, x, face, top, frame)
   if (hero.action === 'cheer' && workers.some(w => w.state === 'done')) {
-    paint(grid, HEART, x + 5, Math.max(0, top - 2))
+    paint(grid, HEART, x + 3, Math.max(0, top - 2))
   }
   for (const f of fx) if (f.kind !== 'boxes') effect(grid, f, now, frame, cols)
 

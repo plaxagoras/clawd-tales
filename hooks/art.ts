@@ -57,32 +57,35 @@ const LEGS_B = '..o.o.o.o'
 const HEAD = '.ooooooo.'
 const EYES = '.okoooko.'
 const ARMS = 'ooooooooo'
+/** Clawd's eyes are tall bars: the second pixel sits in the arms row. */
+const ARMS_EYES = 'ookoookoo'
 
-const STAND: Sprite = [HEAD, EYES, ARMS, HEAD, LEGS_A]
-const STRIDE: Sprite = [HEAD, EYES, ARMS, HEAD, LEGS_B]
+const STAND: Sprite = [HEAD, EYES, ARMS_EYES, HEAD, LEGS_A]
+const STRIDE: Sprite = [HEAD, EYES, ARMS_EYES, HEAD, LEGS_B]
 
-const CHEER: Sprite = ['o.......o', ARMS, EYES, HEAD, LEGS_A]
+/** Arms up, eyes squeezed into > < : Clawd's happy face. */
+const CHEER: Sprite = ['o.......o', 'okoooooko', '.okoooko.', '.koooook.', LEGS_A]
 
 /** Arms up and a red "!" beside the head: something needs the user. */
 const ALERT: Sprite = ['o.......o.r', 'ooooooooo.r', '.okoooko..r', HEAD, '.o.o.o.o..r']
 
-const SIT: Sprite = [HEAD, EYES, ARMS, HEAD]
+const SIT: Sprite = [HEAD, EYES, ARMS_EYES, HEAD]
 const BLINK: Sprite = [HEAD, HEAD, ARMS, HEAD]
 const YAWN: Sprite = [HEAD, '.kkoookk.', 'ooookoooo', HEAD]
 const SLEEP: Sprite = ['..ooooo..', '.kkoookk.', ARMS]
 
 /** Seated poses for the rest-time fidgets. */
 const WAVE: Sprite[] = [
-  ['.ooooooo.o', '.okoooko.o', 'oooooooo.', HEAD],
-  ['.ooooooo..o', '.okoooko.o', 'oooooooo.', HEAD],
+  ['.ooooooo.o', '.okoooko.o', 'ookoooko.', HEAD],
+  ['.ooooooo..o', '.okoooko.o', 'ookoooko.', HEAD],
 ]
 const SCRATCH: Sprite[] = [
-  ['oooooooo.', EYES, '.oooooooo', HEAD],
-  [HEAD, 'ookoooko.', '.oooooooo', HEAD],
+  ['oooooooo.', EYES, '.okoookoo', HEAD],
+  [HEAD, 'ookoooko.', '.okoookoo', HEAD],
 ]
 const LOOK: Sprite[] = [
-  [HEAD, '.koookoo.', ARMS, HEAD],
-  [HEAD, '.ookoook.', ARMS, HEAD],
+  [HEAD, '.koookoo.', 'okoookooo', HEAD],
+  [HEAD, '.ookoook.', 'oookoooko', HEAD],
 ]
 /** Paws over the eyes, knees knocking: rm -rf. */
 const COVER: Sprite[] = [
@@ -91,35 +94,35 @@ const COVER: Sprite[] = [
 ]
 
 const READ: Sprite[] = [
-  [HEAD, '.okoooko.BBb', 'ooooooooobBb', '.ooooooo.bbb', LEGS_A],
+  [HEAD, '.okoooko.BBb', 'ookoookoobBb', '.ooooooo.bbb', LEGS_A],
   [HEAD, '.ooooooo.BBb', 'ooooooooobbB', '.ooooooo.bbb', LEGS_A], // blink, page turns
 ]
 
 const DIG: Sprite[] = [
-  ['.ooooooo...m', '.okoooko..s.', 'ooooooooos..', HEAD, LEGS_A],
-  ['.ooooooo.d.d', EYES, 'ooooooooos..', '.ooooooo..s.', '.o.o.o.o..mm'],
+  ['.ooooooo...m', '.okoooko..s.', 'ookoookoos..', HEAD, LEGS_A],
+  ['.ooooooo.d.d', EYES, 'ookoookoos..', '.ooooooo..s.', '.o.o.o.o..mm'],
 ]
 
 const FLY: Sprite[] = [
-  ['w.......w', 'wooooooow', EYES, HEAD, '..o...o..'],
-  ['.........', HEAD, EYES, 'wooooooow', 'w.o...o.w'],
+  ['w.......w', 'wooooooow', EYES, EYES, '..o...o..'],
+  ['.........', HEAD, EYES, 'wokoookow', 'w.o...o.w'],
 ]
 
-const CARRY_TOP: Sprite = ['.yyyyyyy.', 'oysyyysyo', 'ooooooooo', EYES, HEAD]
+const CARRY_TOP: Sprite = ['.yyyyyyy.', 'oysyyysyo', 'ooooooooo', EYES, EYES]
 const CARRY: Sprite[] = [
   [...CARRY_TOP, LEGS_A],
   [...CARRY_TOP, LEGS_B],
 ]
 
 const SNEAK: Sprite[] = [
-  [HEAD, EYES, ARMS, LEGS_A],
-  [HEAD, EYES, ARMS, LEGS_B],
+  [HEAD, EYES, ARMS_EYES, LEGS_A],
+  [HEAD, EYES, ARMS_EYES, LEGS_B],
 ]
 
 /** Flat on its back, legs up, stars circling. */
 const TRIP: Sprite[] = [
-  ['.z...z...', LEGS_A, HEAD, ARMS, '.okoooko.'],
-  ['z.....z..', LEGS_B, HEAD, ARMS, '.okoooko.'],
+  ['.z...z...', LEGS_A, HEAD, ARMS_EYES, '.okoooko.'],
+  ['z.....z..', LEGS_B, HEAD, ARMS_EYES, '.okoooko.'],
 ]
 
 const UMBRELLA: Sprite = ['..UUUUU..', '.UUUUUUU.', 'U...s...U']
@@ -471,8 +474,8 @@ function emote(grid: string[][], kind: Emote, x: number, dir: 1 | -1, top: numbe
       return
     }
     case 'blush':
-      paint(grid, ['q'], x + (dir > 0 ? 1 : 5), top + 2)
-      paint(grid, ['q'], x + (dir > 0 ? 7 : 11), top + 2)
+      paint(grid, ['q'], x + (dir > 0 ? 1 : 5), top + 3)
+      paint(grid, ['q'], x + (dir > 0 ? 7 : 11), top + 3)
       paint(grid, HEART, dir > 0 ? x + 9 : x + 1, top - 1 - (Math.floor(frame / 3) % 2))
       return
     case 'sweat':

@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { HERO_W, STAGE_ROWS, glyph, lines, mirror, sprite, stage, tierOf, weatherOf } from '../hooks/art'
-import { beat, ending, testCounts } from '../hooks/story'
+import { bashEggs, beat, commitMessage, ending, fidgetAt, holidayOf, moodOf, notFound, restCaption, skyOf, testCounts } from '../hooks/story'
 
 function world(on: On) {
   const clock = mock.clock(on)
@@ -17,7 +17,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -36,6 +36,64 @@ test('test output becomes bug counts', () => {
   expect(testCounts('cargo test', 'test result: FAILED. 3 passed; 1 failed')).toEqual({ failed: 1, passed: 3 })
   expect(testCounts('ls -la', '3 failed')).toBe(null)
   expect(testCounts('pytest', 'collected nothing')).toBe(null)
+})
+
+test('prompts have moods, and fun Bash commands are eggs', () => {
+  expect(moodOf('thanks, that works')).toBe('thanks')
+  expect(moodOf('Good job on the parser')).toBe('thanks')
+  expect(moodOf('no, not like that')).toBe('scold')
+  expect(moodOf("that's not what I asked for")).toBe('scold')
+  expect(moodOf('add a note on node versions')).toBe(null)
+  expect(bashEggs('git add -A && git commit -m "x" && git push')).toEqual(['commit', 'push'])
+  expect(bashEggs('rm -rf build')).toEqual(['nuke'])
+  expect(bashEggs('rm -r build')).toEqual([])
+  expect(bashEggs('npm install left-pad')).toEqual(['install'])
+  expect(bashEggs('sl')).toEqual(['sl'])
+  expect(bashEggs('slack-cli send')).toEqual([])
+  expect(commitMessage('git commit -m "Fix the band\n\nmore"')).toBe('Fix the band')
+  expect(commitMessage("git commit -m \"$(cat <<'EOF'\nTeach Clawd tricks\n\nbody\nEOF\n)\"")).toBe('Teach Clawd tricks')
+  expect(notFound('bash: line 1: sl: command not found')).toBe('sl')
+  expect(notFound('all good')).toBe(null)
+})
+
+test('the calendar and the clock dress the stage', () => {
+  expect(holidayOf(new Date(2026, 9, 31))).toBe('halloween')
+  expect(holidayOf(new Date(2026, 11, 25))).toBe('christmas')
+  expect(holidayOf(new Date(2027, 0, 1))).toBe('newyear')
+  expect(holidayOf(new Date(2027, 3, 1))).toBe('aprilfools')
+  expect(holidayOf(new Date(2026, 9, 5))).toBe(null)
+  expect(skyOf(13)).toBe('day')
+  expect(skyOf(19)).toBe('dusk')
+  expect(skyOf(2)).toBe('night')
+  const rows = stage({ ...HERO, action: 'walk' }, [], 0, 80, {
+    weather: 'clear', bugs: 0, todos: null, holiday: 'halloween', hat: 'witch', sky: 'night',
+  })
+  const all = rows.join('')
+  for (const key of ['A', 'O', 'W']) expect(all.includes(key)).toBe(true) // hat and bats, pumpkin, stars
+})
+
+test('rest time fidgets, then dreams of the last pose', () => {
+  expect(fidgetAt(3000, 0)).toBe(null) // the first slot is a plain sit
+  expect(fidgetAt(8000, 0)).not.toBe(null)
+  expect(fidgetAt(12000, 0)).toBe(null) // between fidgets
+  expect(restCaption('sleep', 'read')).toMatch(/dreaming of books/)
+  const asleep = stage({ ...HERO, action: 'sleep', last: 'read' }, [], 15, 60)
+  expect(asleep.join('').includes('B')).toBe(true) // the book in the dream bubble
+})
+
+test('effects, emotes and a patted helper draw', () => {
+  const fx = [
+    { id: 1, kind: 'confetti', start: 0, dur: 2200, x: 10 },
+    { id: 2, kind: 'train', start: 0, dur: 8000, x: 0 },
+    { id: 3, kind: 'whale', start: 0, dur: 16000, x: 0 },
+  ] as const
+  const rows = stage({ ...HERO, emote: 'think' }, [], 0, 80, { weather: 'clear', bugs: 0, todos: null, fx, now: 4000, shiny: true })
+  const all = rows.join('')
+  for (const key of ['U', 'c', 'n', 'w']) expect(all.includes(key)).toBe(true) // train, whale, shiny body, bubble
+  const sad = { id: 'w', label: 'x', tier: 'haiku', state: 'done', action: 'sit', x: 40, dir: 1, steps: 0, sad: true } as const
+  const patted = stage({ ...HERO, x: 20 }, [sad], 0, 80)
+  expect(patted.some(r => r.includes('e'))).toBe(true) // grey helper
+  expect(patted.some(r => r.includes('q'))).toBe(true) // with a heart
 })
 
 test('context fill is weather', () => {
@@ -117,13 +175,16 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await clock.advance(5000) // 23.5 s
     expect(await see(/3\/5 tasks/)).toBeDefined()
 
-    await clock.advance(6000) // 29.5 s
-    expect(await see(/The end/)).toBeDefined()
+    await clock.advance(2500) // 26 s: the commit egg
+    expect(await see(/seals the parcel/)).toBeDefined()
+
+    await clock.advance(3500) // 29.5 s
+    expect(await see(/The end.*crown ×12/)).toBeDefined()
 
     await clock.advance(10000) // 39.5 s: resting
     expect(await see(/sits by the path/)).toBeDefined()
 
-    await clock.advance(30000) // 69.5 s
+    await clock.advance(50000) // 89.5 s
     expect(await see(/dozes/)).toBeDefined()
 
     await clock.advance(200000)
@@ -157,6 +218,27 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await clock.advance(60000) // a long think after the call: the pose stays
     expect(await see(pose)).toBeDefined()
     expect(await see(thinking)).toBe(undefined)
+  })
+
+  test(`thanks, a clean streak and a commit all show (${surface})`, async ($, on) => {
+    const clock = world(on)
+    on('prompt.submit', (_, e) => e as never)
+    on('tool.call', () => ({ result: { stdout: 'ok', stderr: '' }, text: 'ok' }) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    await $.prompt.submit({ text: 'thanks! now commit it' } as never)
+    const see = async (text: RegExp) => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    expect(await see(/blushes/)).toBeDefined()
+    for (let n = 0; n < 5; n++) await $.tool.call({ tool: 'Read', file_path: `/a/f${n}.ts`, tool_use_id: `r${n}` } as never)
+    expect(await see(/×5 combo/)).toBeDefined()
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m "Add hats"', tool_use_id: 'c1' } as never)
+    expect(await see(/seals the parcel and stamps it: “Add hats”/)).toBeDefined()
+    await clock.advance(10000) // a long think keeps the caption
+    expect(await see(/seals the parcel/)).toBeDefined()
   })
 
   test(`a permission dialog makes Claude call for you, an auto-settled ask does not (${surface})`, async ($, on) => {

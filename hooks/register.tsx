@@ -1,9 +1,32 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Action, Hero, Limit, Worker } from '../types'
-import { HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lines, speed, stage, tierOf, weatherOf } from './art'
-import { REST, THINKING, beat, clockTime, ending, restCaption, testCounts, tripCaption } from './story'
+import type { Action, Emote, Fx, FxKind, Hat, Hero, Holiday, Limit, Worker } from '../types'
+import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lines, speed, stage, tierOf, weatherOf } from './art'
+import type { Egg } from './story'
+import {
+  COMBO_AT,
+  CROWN_AT,
+  REST,
+  THINKING,
+  bashEggs,
+  beat,
+  clockTime,
+  eggBeat,
+  eggDone,
+  ending,
+  fidgetAt,
+  holidayOf,
+  isLate,
+  isMidnightNewYear,
+  moodOf,
+  notFound,
+  restCaption,
+  skyOf,
+  startCaption,
+  testCounts,
+  tripCaption,
+} from './story'
 
 const IDLE: Hero = { mode: 'idle', action: 'walk', caption: '', x: 0, dir: 1, scene: 0, steps: 0, since: 0 }
 
@@ -17,6 +40,9 @@ const limits = atom({ plugin: 'clawd-tales', key: 'limits' } as const, [])
 const calm = atom({ plugin: 'clawd-tales', key: 'calm' } as const, false)
 const bugs = atom({ plugin: 'clawd-tales', key: 'bugs' } as const, 0)
 const todos = atom({ plugin: 'clawd-tales', key: 'todos' } as const, null)
+const fx = atom({ plugin: 'clawd-tales', key: 'fx' } as const, [])
+const shiny = atom({ plugin: 'clawd-tales', key: 'shiny' } as const, null)
+const combo = atom({ plugin: 'clawd-tales', key: 'combo' } as const, 0)
 
 const TICK_MS = 200
 const CALM_TICK_MS = 1000 // calm mode: one beat a second
@@ -27,6 +53,12 @@ const LINGER_MS = 8000 // the closing cheer lasts this long, then the rest ladde
 const HUG_MS = 3000 // a helper that made it back stays this long with hearts
 const RETURN_MAX_MS = 10_000 // a helper that can't reach Claude hands in anyway
 const ENDED = new Set(['completed', 'failed', 'killed'])
+const THINK_POSE_MS = 8000 // no tool call for this long mid-turn: a thought bubble
+const MOOD_MS = 4000 // a blush or a sweat drop lasts this long
+const VISITOR_ODDS = 1 / 25 // per prompt
+const SHINY_ODDS = 1 / 100 // per session
+const FX_MS: Record<FxKind, number> = { confetti: 2200, plane: 3500, boxes: 6000, train: 8000, whale: 16000, ufo: 10000 }
+const HOLIDAYS: readonly Holiday[] = ['halloween', 'christmas', 'newyear', 'valentine', 'aprilfools']
 
 // Module-level: a reload starts these over, and session.start picks the story back up.
 let timer: Timer | undefined
@@ -36,6 +68,10 @@ let cols = 100
 let heroCalls = 0 // main-loop tool calls still running: a trip waits for them to end
 let tripUntil = 0
 let startedAt = 0
+let lastCallAt = 0 // the last main-loop tool call's end, for the thought bubble
+let best = 0 // the turn's best combo
+let fxId = 0
+let holidayPick: Holiday | 'none' | null = null // /tales holiday: a preview, this load only
 const workerBeatAt = new Map<string, number>()
 const workerTripUntil = new Map<string, number>()
 const returningSince = new Map<string, number>()
@@ -53,14 +89,38 @@ function walk<T extends { x: number; dir: 1 | -1 }>(it: T, action: Action): T {
 }
 
 /** The rest ladder, by time since the turn's cheer ended. Null once Claude has gone. */
-function restStep(since: number, now: number, lim: Limit | null): Pick<Hero, 'action' | 'caption'> | null {
+function restStep(since: number, now: number, lim: Limit | null, last?: Action): Pick<Hero, 'action' | 'caption' | 'emote'> | null {
   if (lim && lim.percent >= 100) {
-    return { action: 'sleep', caption: `Claude sleeps until the ${lim.kind} limit resets at ${clockTime(lim.resetsAt)}. z z z` }
+    return { action: 'sleep', caption: `Claude sleeps until the ${lim.kind} limit resets at ${clockTime(lim.resetsAt)}. z z z`, emote: null }
   }
   const t = now - since
   if (t >= REST.hideMs) return null
   const action = t < REST.sitMs ? 'sit' : t < REST.yawnMs ? 'yawn' : 'sleep'
-  return { action, caption: restCaption(action) }
+  const fidget = action === 'sit' ? fidgetAt(t, Math.floor(since / 1000)) : null
+  if (fidget) return { action: fidget.action, caption: fidget.caption, emote: fidget.emote ?? null }
+  return { action, caption: restCaption(action, last), emote: null }
+}
+
+function holidayNow(d: Date): Holiday | null {
+  if (holidayPick === 'none') return null
+  return holidayPick ?? holidayOf(d)
+}
+
+async function addFx($: EngineInterface, kind: FxKind, x: number) {
+  if ((await read($, hero)).mode === 'idle') return
+  const start = await $.clock.now()
+  fxId += 1
+  const one: Fx = { id: fxId, kind, start, dur: FX_MS[kind], x }
+  await update($, fx, list => [...list.filter(f => f.kind !== kind), one])
+  ensureTimer($)
+}
+
+/** A rare visitor crosses during the turn: a sky whale, a UFO, or the train. */
+function maybeVisitor($: EngineInterface, force?: FxKind) {
+  if (!force && Math.random() >= VISITOR_ODDS) return
+  const kinds: FxKind[] = ['whale', 'ufo', 'train']
+  const kind = force ?? kinds[Math.floor(Math.random() * kinds.length)] ?? 'whale'
+  $.clock.after(force ? 0 : 3000 + Math.floor(Math.random() * 12000), () => void addFx($, kind, 0))
 }
 
 function ensureTimer($: EngineInterface) {
@@ -75,15 +135,25 @@ function ensureTimer($: EngineInterface) {
       cur = { ...cur, mode: 'resting', since: now, action: 'sit', caption: restCaption('sit') }
       await update($, hero, () => cur)
     }
+    if (cur.emote && cur.mode !== 'resting' && cur.emote !== 'think' && now > (cur.emoteUntil ?? 0)) {
+      cur = { ...cur, emote: null }
+      await update($, hero, () => cur)
+    }
     if (cur.mode === 'resting') {
-      const step = restStep(cur.since, now, topLimit(await read($, limits)))
-      const next: Hero = step ? { ...cur, ...step } : { ...cur, mode: 'idle' }
-      if (next.action !== cur.action || next.mode !== cur.mode || next.caption !== cur.caption) {
+      const step = restStep(cur.since, now, topLimit(await read($, limits)), cur.last)
+      const next: Hero = step ? { ...cur, ...step } : { ...cur, mode: 'idle', emote: null }
+      if (next.action !== cur.action || next.mode !== cur.mode || next.caption !== cur.caption || next.emote !== cur.emote) {
         cur = next
         await update($, hero, () => next)
+        if (next.mode === 'idle') await update($, fx, () => [])
       }
     }
-    if (cur.mode === 'idle' && crew.length === 0) {
+    let effects = await read($, fx)
+    if (effects.some(f => now - f.start >= f.dur)) {
+      effects = effects.filter(f => now - f.start < f.dur)
+      await update($, fx, () => effects)
+    }
+    if (cur.mode === 'idle' && crew.length === 0 && effects.length === 0) {
       timer?.cancel()
       timer = undefined
       return
@@ -97,6 +167,10 @@ function ensureTimer($: EngineInterface) {
       // only a trip, once played, goes back to wandering.
       if (cur.action === 'trip' && heroCalls === 0 && now >= tripUntil) {
         next = { ...next, action: 'walk', caption: THINKING[f % THINKING.length] ?? '' }
+      }
+      // A long think: the pose and caption stay, a thought bubble rises.
+      if (!cur.emote && heroCalls === 0 && now - lastCallAt >= THINK_POSE_MS && next.action !== 'trip') {
+        next = { ...next, emote: 'think', emoteUntil: Infinity }
       }
       if (!isCalm) next = walk(next, next.action)
       if (next !== cur) await update($, hero, () => next)
@@ -112,7 +186,7 @@ function ensureTimer($: EngineInterface) {
             const late = now - (returningSince.get(w.id) ?? now) > RETURN_MAX_MS
             if (Math.abs(gap) <= HERO_W - 4 || late) {
               arrived.push(w.id)
-              return { ...w, state: 'done', action: 'cheer', dir: gap >= 0 ? 1 : -1 }
+              return { ...w, state: 'done', action: w.sad ? 'sit' : 'cheer', dir: gap >= 0 ? 1 : -1 }
             }
             const dir: 1 | -1 = gap > 0 ? 1 : -1
             const step = Math.min(Math.abs(gap), isCalm ? 8 : 1)
@@ -125,10 +199,29 @@ function ensureTimer($: EngineInterface) {
           return isCalm ? { ...w, action } : walk({ ...w, action }, action)
         }),
       )
+      if (!isCalm) await update($, workers, conga)
       for (const id of arrived) $.clock.after(HUG_MS, () => void leave($, id))
       if (ticks % POLL_EVERY === 0) await settle($, crew)
     }
   })
+}
+
+/** Four or more helpers out: the ones wandering fall in line behind the first. */
+function conga(list: Worker[]): Worker[] {
+  const line = list.filter(w => w.state === 'running' && speed(w.action) > 0)
+  if (list.filter(w => w.state === 'running').length < CONGA_AT || line.length < 2) return list
+  const max = Math.max(0, cols - HERO_W)
+  const placed = new Map<string, Worker>()
+  let ahead = line[0]!
+  for (const w of line.slice(1)) {
+    const want = Math.min(max, Math.max(0, ahead.x - ahead.dir * 12))
+    const gap = want - w.x
+    const step = Math.min(Math.abs(gap), 1)
+    const moved: Worker = { ...w, action: 'walk', x: w.x + Math.sign(gap) * step, dir: gap === 0 ? ahead.dir : gap > 0 ? 1 : -1 }
+    placed.set(w.id, moved)
+    ahead = moved
+  }
+  return list.map(w => placed.get(w.id) ?? w)
 }
 
 async function leave($: EngineInterface, id: string) {
@@ -146,8 +239,12 @@ async function finish($: EngineInterface, id: string, state: 'done' | 'failed') 
     ensureTimer($)
     return
   }
-  await update($, workers, list => list.map(w => (w.id === id ? { ...w, state: 'failed', action: 'trip' } : w)))
-  $.clock.after(HUG_MS, () => void leave($, id))
+  await update($, workers, list => list.map(w => (w.id === id ? { ...w, state: 'failed', action: 'trip', sad: true } : w)))
+  // It trips, dusts off, and walks back to Claude for a pat on the head.
+  $.clock.after(TRIP_MS, async () => {
+    returningSince.set(id, await $.clock.now())
+    await update($, workers, list => list.map(w => (w.id === id ? { ...w, state: 'returning', action: 'walk' } : w)))
+  })
 }
 
 async function settle($: EngineInterface, list: readonly Worker[]) {
@@ -201,24 +298,46 @@ async function workerBeat($: EngineInterface, id: string, action: Action, isErro
 }
 
 /** A main-thread beat: action and caption, unless Claude is waiting on the user. */
-async function heroBeat($: EngineInterface, b: Pick<Hero, 'action' | 'caption'>, step = 1) {
-  await update($, hero, (cur): Hero => (cur.mode === 'working' ? { ...cur, ...b, steps: cur.steps + step } : cur))
+const POSES = new Set<Action>(['read', 'dig', 'sneak', 'run', 'fly', 'carry', 'cover'])
+
+async function heroBeat($: EngineInterface, b: Pick<Hero, 'action' | 'caption'>, step = 1, mood?: Emote) {
+  const now = await $.clock.now()
+  lastCallAt = now
+  await update($, hero, (cur): Hero => {
+    if (cur.mode !== 'working') return cur
+    const emote = mood ?? (cur.emote === 'think' ? null : cur.emote)
+    return {
+      ...cur,
+      ...b,
+      steps: cur.steps + step,
+      emote,
+      emoteUntil: mood ? now + MOOD_MS : cur.emoteUntil,
+      last: POSES.has(b.action) ? b.action : cur.last,
+    }
+  })
 }
 
-async function begin($: EngineInterface) {
+async function begin($: EngineInterface, text = '') {
   const now = await $.clock.now()
+  const d = new Date(now)
   startedAt = now
+  lastCallAt = now
   heroCalls = 0
   tripUntil = 0
+  best = 0
+  const mood = moodOf(text)
+  await update($, combo, () => 0)
   await update($, alert, () => null)
   await update($, hero, (cur): Hero => ({
     ...cur,
     mode: 'working',
     action: 'walk',
-    caption: cur.action === 'sleep' ? 'Claude wakes with a start and sets out…' : 'Once upon a prompt, Claude set out…',
+    caption: startCaption({ mood, woke: cur.action === 'sleep', holiday: holidayNow(d), hour: d.getHours() }),
     scene: cur.mode === 'idle' ? (cur.scene + 1) % SCENE_COUNT : cur.scene,
     steps: 0,
     since: now,
+    emote: mood === 'thanks' ? 'blush' : mood === 'scold' ? 'sweat' : null,
+    emoteUntil: now + MOOD_MS,
   }))
   ensureTimer($)
 }
@@ -226,7 +345,7 @@ async function begin($: EngineInterface) {
 async function close($: EngineInterface, caption: string) {
   const now = await $.clock.now()
   await update($, alert, () => null)
-  await update($, hero, (cur): Hero => ({ ...cur, mode: 'ending', action: 'cheer', caption, since: now }))
+  await update($, hero, (cur): Hero => ({ ...cur, mode: 'ending', action: 'cheer', caption, since: now, emote: null }))
   ensureTimer($)
 }
 
@@ -259,6 +378,26 @@ async function onTodos($: EngineInterface, input: Record<string, unknown>) {
     const what = typeof last?.content === 'string' ? last.content : 'a task'
     await heroBeat($, { action: 'cheer', caption: next ? `Claude gobbles a pellet: ${what}` : 'Claude clears the whole quest list!' }, 0)
   }
+}
+
+/** Clean calls in a row: a combo from 5, a crown at 10. */
+async function onCombo($: EngineInterface) {
+  let n = 0
+  await update($, combo, c => (n = c + 1))
+  best = Math.max(best, n)
+  if (n === CROWN_AT) await heroBeat($, { action: 'cheer', caption: `${CROWN_AT} clean calls in a row. Claude earns a crown!` }, 0)
+}
+
+/** A fun Bash command went through: confetti, a paper plane, boxes. */
+async function onEggs($: EngineInterface, eggs: readonly Egg[], command: string) {
+  const x = (await read($, hero)).x
+  for (const egg of eggs) {
+    if (egg === 'commit') await addFx($, 'confetti', x)
+    if (egg === 'push') await addFx($, 'plane', x)
+    if (egg === 'install') await addFx($, 'boxes', Math.min(Math.max(0, cols - 4), x + HERO_W))
+  }
+  const done = eggs.map(egg => eggDone(egg, command)).filter(Boolean)
+  if (done.length > 0) await heroBeat($, { action: 'cheer', caption: done.join('. ') }, 0)
 }
 
 function readLimits(rates: readonly { kind: string; percentUsed: number; resetsAt?: string }[]): Limit[] {
@@ -319,7 +458,13 @@ function runDemo($: EngineInterface) {
     acts.forEach((a, i) => at(t + 1500 + i * 2500, () => workerBeat($, id, a, false)))
     at(t + 1500 + acts.length * 2500 + n * 600, () => finish($, id, end))
   })
-  at(28000, () => close($, ending(9, 28, false)))
+  at(24500, () => maybeVisitor($, 'whale'))
+  at(25000, () => heroBeat($, eggBeat('commit', 'git commit -m "Teach Clawd new tricks"')))
+  at(26000, async () => {
+    await heroBeat($, { action: 'cheer', caption: eggDone('commit', 'git commit -m "Teach Clawd new tricks"') ?? '' }, 0)
+    await addFx($, 'confetti', (await read($, hero)).x)
+  })
+  at(28000, () => close($, ending(9, 28, false, 12)))
   at(40000, () => update($, context, () => 30))
 }
 
@@ -337,6 +482,11 @@ export const register: Register = on => {
       await update($, limits, () => readLimits(usage.rateLimits))
     } catch {
       // No usage yet: the first measure fills it in.
+    }
+    if ((await read($, shiny)) === null) {
+      const lucky = Math.random() < SHINY_ODDS
+      await update($, shiny, () => lucky)
+      if (lucky) await $.ui.toast('✨ A shiny Clawd appeared this session!')
     }
     if ((await read($, hero)).mode !== 'idle' || (await read($, workers)).length > 0) ensureTimer($)
     return next(e)
@@ -359,12 +509,23 @@ export const register: Register = on => {
       runDemo($)
       return { text: 'A short fable: helpers, bugs, pellets, weather and a call for you. About 45 seconds.' }
     }
+    // Unlisted: preview a holiday look (this load only). "auto" goes back to the calendar.
+    const [word, name] = arg.split(/\s+/)
+    if (word === 'holiday') {
+      if (name === 'auto') holidayPick = null
+      else if (name === 'off') holidayPick = 'none'
+      else if (HOLIDAYS.includes(name as Holiday)) holidayPick = name as Holiday
+      else return { text: `Holidays: ${HOLIDAYS.join(', ')}, off, auto.` }
+      return { text: `Holiday look: ${name}.` }
+    }
     const mode = (await read($, calm)) ? 'calm' : 'lively'
-    return { text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}). Use /tales on|off|calm|lively|demo.` }
+    const sparkle = (await read($, shiny)) ? ' ✨ Shiny Clawd this session.' : ''
+    return { text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}). Use /tales on|off|calm|lively|demo.${sparkle}` }
   })
 
   on('prompt.submit', async ($, e, next) => {
-    await begin($)
+    await begin($, e.text)
+    maybeVisitor($)
     return next(e)
   })
 
@@ -394,11 +555,15 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const seed = e.tool_use_id ?? e.tool
     const args = e as unknown as Record<string, unknown>
-    const b = beat(e.tool, args, seed)
     const owner = e.agentId
+    const command = e.tool === 'Bash' && typeof args.command === 'string' ? args.command : ''
+    const eggs = owner ? [] : bashEggs(command)
+    const egg = eggs[0] ? eggBeat(eggs[0], command) : null
+    const b = egg ?? beat(e.tool, args, seed)
     const asks = e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode'
     if (owner) await workerBeat($, owner, b.action, false)
-    else await heroBeat($, b)
+    else await heroBeat($, b, 1, egg?.emote)
+    if (eggs.includes('sl')) await addFx($, 'train', 0)
     if (asks) {
       await update($, alert, () => (e.tool === 'ExitPlanMode' ? 'Claude needs you: approve the plan?' : 'Claude needs you: a question is waiting'))
       ensureTimer($)
@@ -410,6 +575,7 @@ export const register: Register = on => {
     } finally {
       if (!owner) {
         heroCalls = Math.max(0, heroCalls - 1)
+        lastCallAt = await $.clock.now()
       }
     }
     // Whatever it was waiting on, the call has gone ahead (or been refused).
@@ -419,8 +585,18 @@ export const register: Register = on => {
         await workerBeat($, owner, 'trip', true)
       } else {
         tripUntil = (await $.clock.now()) + TRIP_MS
-        await heroBeat($, { action: 'trip', caption: tripCaption(e.tool, seed) }, 0)
+        const missing = command && typeof result.text === 'string' ? notFound(result.text) : null
+        if (missing) {
+          await heroBeat($, { action: 'trip', caption: `Choo choo! “${missing}” isn't a command` }, 0)
+          await addFx($, 'train', 0)
+        } else {
+          await heroBeat($, { action: 'trip', caption: tripCaption(e.tool, seed) }, 0)
+        }
+        await update($, combo, () => 0)
       }
+    } else if (!owner) {
+      await onCombo($)
+      if (eggs.length > 0) await onEggs($, eggs, command)
     }
     if (result.deny === undefined && e.tool === 'Bash' && typeof result.text === 'string') {
       await onTests($, typeof args.command === 'string' ? args.command : '', result.text, !owner)
@@ -433,7 +609,7 @@ export const register: Register = on => {
     const cur = await read($, hero)
     if (cur.mode === 'working') {
       const seconds = Math.round(((await $.clock.now()) - startedAt) / 1000)
-      await close($, ending(cur.steps, seconds, e.isAborted))
+      await close($, ending(cur.steps, seconds, e.isAborted, best))
     }
     return next(e)
   })
@@ -482,7 +658,26 @@ export const register: Register = on => {
     }
 
     const task = await read($, todos)
-    const extras = { weather: weatherOf(await read($, context)), bugs: await read($, bugs), todos: task }
+    const now = await $.clock.now()
+    const day = new Date(now)
+    const holiday = holidayNow(day)
+    const hour = day.getHours()
+    const streak = await read($, combo)
+    const hat: Hat | null =
+      streak >= CROWN_AT ? 'crown' : holiday === 'halloween' ? 'witch' : holiday === 'christmas' ? 'santa' : holiday === 'newyear' ? 'party' : isLate(hour) ? 'nightcap' : null
+    const extras = {
+      weather: weatherOf(await read($, context)),
+      bugs: await read($, bugs),
+      todos: task,
+      now,
+      sky: skyOf(hour),
+      holiday,
+      fireworks: holiday === 'newyear' && isMidnightNewYear(day),
+      hat,
+      shiny: (await read($, shiny)) === true,
+      late: isLate(hour),
+      fx: await read($, fx),
+    }
     const all = lines(stage(shown, crew, f, cols, extras))
     // Standing Claude reaches the second line; only the alert crop cuts into him.
     const stageLines = all.slice(rows >= 8 ? 0 : Math.min(2, Math.max(1, all.length - room)))
@@ -494,14 +689,15 @@ export const register: Register = on => {
     const tone = (p: number) => (p >= 95 ? '#e5534b' : p >= 80 ? '#e0b84c' : undefined)
     const hasRoom = rows >= stageLines.length + captionRows + 1
     const roster =
-      !hasRoom || (crew.length === 0 && !task && gauges.length === 0) ? null : (
+      !hasRoom || (crew.length === 0 && !task && gauges.length === 0 && streak < COMBO_AT) ? null : (
         <Box flexDirection="row">
           {gauges.map((g, n) => (
             <Text color={tone(g.percent)} dimColor={!tone(g.percent)}>
               {`${n ? ' · ' : ''}${g.label} ${g.percent}%`}
             </Text>
           ))}
-          {gauges.length > 0 && (task || crew.length > 0) ? <Text dimColor>{'   '}</Text> : null}
+          {gauges.length > 0 && (task || crew.length > 0 || streak >= COMBO_AT) ? <Text dimColor>{'   '}</Text> : null}
+          {streak >= COMBO_AT ? <Text color="#e0b84c" bold>{`×${streak} combo${streak >= CROWN_AT ? ' 👑' : ''}  `}</Text> : null}
           {task ? <Text color="#f5d76e">{`● ${task.done}/${task.total} tasks  `}</Text> : null}
           {crew.slice(0, 4).map(w => (
             <Text color={TIER_COLOR[w.state === 'failed' ? 'other' : w.tier]}>

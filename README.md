@@ -26,6 +26,20 @@ Every tool call gets a pose and a one-line caption. Claude reads a book for `Rea
 | Context fills up | Clouds at 50%, rain and an umbrella at 70%, lightning at 85% |
 | The turn ends | A cheer, then Clawd sits, yawns and falls asleep. The band hides after 3 minutes; your next prompt wakes Clawd, and a new helper brings the band back |
 | A plan limit hits 100% | Clawd sleeps until the reset time |
+| Claude thinks for a while between tool calls | A thought bubble fills in over the pose it is holding |
+| Five clean tool calls in a row | A combo counter. At ten, Clawd wears a crown |
+| A subagent fails | It trips, then walks back to Clawd for a pat on the head |
+| Four or more subagents out at once | The idle ones walk in a line behind the first one |
+
+### Small things
+
+- Thank Claude in your prompt and Clawd blushes. Start with "no" or "wrong" and it rubs its head.
+- `git commit` wraps a parcel and pops confetti. `git push` sends a paper plane off the stage. `rm -rf` makes Clawd cover its eyes. Package installs drop boxes from the sky.
+- A command that isn't found sends the `sl` train across the stage.
+- While it waits for you, Clawd waves, scratches its head, looks around and watches a butterfly. Asleep, it dreams about the last thing it did.
+- The sky follows your clock: sun by day, stars at night. Between 1 and 5 am, Clawd wears a nightcap and keeps a mug of coffee nearby.
+- Halloween, Christmas, New Year's, Valentine's Day and April 1st each get a costume or something extra.
+- Now and then a whale, a UFO or the train passes through. One session in a hundred brings a shiny Clawd.
 
 Under the caption, a status line shows `ctx 74% · 5h 22% · 7d 23%`, plus the todo count and a roster of the helpers. Numbers turn yellow at 80% and red at 95%.
 
@@ -58,6 +72,7 @@ claude --plugin-dir ./clawd-tales
 | `/tales lively` | Back to 5 frames a second (the default) |
 | `/tales off` / `/tales on` | Hide or show the band |
 | `/tales` | Shows the current state |
+| `/tales holiday <name>` | Previews a holiday look until the next restart (`auto` goes back to the calendar) |
 
 Your on/off and calm settings are saved between sessions.
 

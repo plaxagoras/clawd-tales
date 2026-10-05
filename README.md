@@ -30,6 +30,10 @@ Every tool call gets a pose and a one-line caption. Claude reads a book for `Rea
 | Five clean tool calls in a row | A combo counter. At ten, Clawd wears a crown |
 | A subagent fails | It trips, then walks back to Clawd for a pat on the head |
 | Four or more subagents out at once | The idle ones walk in a line behind the first one |
+| Two errors in a row | Clawd goes cross-eyed with stars circling. A third flips the table |
+| You approve a permission prompt quickly | Hearts. Leave one waiting past 30 seconds and Clawd starts to sweat, with a timer in the caption |
+| The conversation is compacted | Clawd sweeps the stage with a broom and the weather clears |
+| A session starts | Clawd drops in from the sky. A resumed session gets a wave hello |
 
 ### Small things
 
@@ -37,6 +41,7 @@ Every tool call gets a pose and a one-line caption. Claude reads a book for `Rea
 - `git commit` wraps a parcel and pops confetti. `git push` sends a paper plane off the stage. `rm -rf` makes Clawd cover its eyes. Package installs drop boxes from the sky.
 - A command that isn't found sends the `sl` train across the stage.
 - While it waits for you, Clawd waves, winks, scratches its head, looks around and watches a butterfly. A longer wait and it goes fishing. Asleep, it dreams about the last thing it did.
+- Clawd glances left and right now and then, and looks over when a helper walks in. Sitting, it breathes.
 - The sky follows your clock: sun by day, stars at night. Between 1 and 5 am, Clawd wears a nightcap and keeps a mug of coffee nearby.
 - Halloween, Christmas, New Year's, Valentine's Day and April 1st each get a costume or something extra.
 - Now and then a whale, a UFO or the train passes through. One session in a hundred brings a shiny Clawd.

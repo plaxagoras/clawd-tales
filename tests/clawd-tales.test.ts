@@ -17,7 +17,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -91,6 +91,20 @@ test('a long wait goes fishing, with a bite now and then', () => {
   expect((rows[STAGE_ROWS - 1] ?? '').includes('j')).toBe(true) // the puddle
   const bite = stage({ ...HERO, action: 'reel' }, [], 0, 60)
   expect(bite.join('').includes('c')).toBe(true) // the fish
+})
+
+test('eyes glance, and dizzy, flip, sweep and drop draw their extras', () => {
+  const ahead = stage({ ...HERO }, [], 0, 40).join('\n')
+  const left = stage({ ...HERO, glance: -1, glanceUntil: 10 }, [], 0, 40, { weather: 'clear', bugs: 0, todos: null, now: 5 }).join('\n')
+  expect(left).not.toBe(ahead)
+  expect(left.includes('.koookoo.')).toBe(true)
+  const dizzy = stage({ ...HERO, action: 'dizzy' }, [], 0, 40).join('')
+  expect(dizzy.includes('z')).toBe(true) // circling stars
+  const flip = stage({ ...HERO, action: 'flip' }, [], 0, 40).join('')
+  expect(flip.includes('s')).toBe(true) // the table
+  const falling = stage({ ...HERO, action: 'drop', since: 0 }, [], 0, 40, { weather: 'clear', bugs: 0, todos: null, now: 100 })
+  const landed = stage({ ...HERO, action: 'drop', since: 0 }, [], 0, 40, { weather: 'clear', bugs: 0, todos: null, now: 900 })
+  expect(falling.findIndex(r => r.includes('o'))).toBeLessThan(landed.findIndex(r => r.includes('o')))
 })
 
 test('hats and face gear draw', () => {
@@ -261,6 +275,59 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/seals the parcel and stamps it: “Add hats”/)).toBeDefined()
     await clock.advance(10000) // a long think keeps the caption
     expect(await see(/seals the parcel/)).toBeDefined()
+  })
+
+  test(`stumbles escalate, a quick yes earns hearts, a long wait gets nervous (${surface})`, async ($, on) => {
+    const clock = world(on)
+    let fail = true
+    on('prompt.submit', (_, e) => e as never)
+    on('classic.PermissionRequest', () => ({}) as never)
+    on('tool.call', () => (fail ? { result: { stdout: '', stderr: 'boom' }, text: 'boom', isError: true } : { result: { stdout: 'ok', stderr: '' }, text: 'ok' }) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    await $.prompt.submit({ text: 'go' } as never)
+    const see = async (text: RegExp) => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    const call = (n: number) => $.tool.call({ tool: 'Read', file_path: `/f${n}`, tool_use_id: `e${n}` } as never)
+    await call(1)
+    await call(2)
+    expect(await see(/sees stars/)).toBeDefined()
+    await call(3)
+    expect(await see(/flips the table/)).toBeDefined()
+    fail = false
+    await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'make' } } as never)
+    await clock.advance(31000)
+    expect(await see(/waiting 3\ds/)).toBeDefined()
+    await call(4)
+    expect(await see(/quick yes/)).toBe(undefined) // too slow for hearts
+    await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'make' } } as never)
+    await clock.advance(1000)
+    await call(5)
+    expect(await see(/quick yes/)).toBeDefined()
+  })
+
+  test(`a fresh session drops Clawd in, and compaction sweeps (${surface})`, async ($, on) => {
+    const clock = world(on)
+    on('classic.SessionStart', () => ({}) as never)
+    on('session.compact', (_, e) => ({ messages: e.messages }) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    const see = async (text: RegExp) => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    await $.classic.SessionStart({ source: 'startup', hook_event_name: 'SessionStart' } as never)
+    expect(await see(/drops in/)).toBeDefined()
+    await clock.advance(200000) // rests, then hides
+    expect(await see(/drops in|sits/)).toBe(undefined)
+    await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'hi', toolUses: [] }] } as never)
+    expect(await see(/Squeaky clean/)).toBeDefined()
+    await $.session.compact({ trigger: 'precompute', messages: [{ role: 'user', text: 'hi', toolUses: [] }] } as never)
+    expect(await see(/Squeaky clean/)).toBeDefined() // a precompute changes nothing
   })
 
   test(`a permission dialog makes Claude call for you, an auto-settled ask does not (${surface})`, async ($, on) => {

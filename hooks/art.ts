@@ -95,6 +95,19 @@ const FISH: Sprite = ['.ooooooo...m', '.okoooko..m.', 'ookoookoos..', HEAD]
 /** Rod bent up, eyes squeezed shut: something bit. */
 const REEL: Sprite = ['.ooooooo.mm.', '.kkoookk.m..', 'ooooooooos..', HEAD]
 
+/** Cross-eyed and wobbling after two stumbles in a row; stars circle the head. */
+const DIZZY: Sprite[] = [
+  [HEAD, '.ookokoo.', ARMS_EYES, HEAD, LEGS_A],
+  [HEAD, '.ookokoo.', ARMS_EYES, HEAD, LEGS_B],
+]
+/** Arms up, brows down: three in a row. The table is drawn by the stage. */
+const FLIP: Sprite = ['o.......o', 'ookoookoo', '.ookokoo.', HEAD, LEGS_A]
+/** A broom out front, bristles swishing: compaction. */
+const SWEEP: Sprite[] = [
+  [HEAD, EYES, 'ookoookoos..', '.ooooooo..s.', '.o.o.o.o..yy'],
+  [HEAD, EYES, 'ookoookoos..', '.ooooooo.s..', '.o.o.o.o.yy.'],
+]
+
 /** Paws over the eyes, knees knocking: rm -rf. */
 const COVER: Sprite[] = [
   [HEAD, ARMS, HEAD, HEAD, LEGS_A],
@@ -148,6 +161,8 @@ function lift(action: Action, frame: number): number {
   if (action === 'fly') return 2 + (frame % 4 < 2 ? 1 : 0)
   if (action === 'cheer') return frame % 2 === 0 ? 1 : 0
   if (action === 'alert') return frame % 4 < 2 ? 2 : 0
+  // Seated, Clawd breathes: a one-pixel bob, the official idle.
+  if (action === 'sit' || action === 'wink' || action === 'fish') return Math.floor(frame / 4) % 2
   return 0
 }
 
@@ -184,6 +199,14 @@ export function sprite(action: Action, frame: number): Sprite {
       return LOOK[Math.floor(frame / 5) % 2] ?? SIT
     case 'cover':
       return COVER[two] ?? STAND
+    case 'dizzy':
+      return DIZZY[Math.floor(frame / 2) % 2] ?? STAND
+    case 'flip':
+      return FLIP
+    case 'sweep':
+      return SWEEP[Math.floor(frame / 2) % 2] ?? STAND
+    case 'drop':
+      return CHEER
     case 'wink':
       return WINK
     case 'fish':
@@ -301,14 +324,33 @@ export function mirror(art: Sprite): Sprite {
   return art.map(r => r.padEnd(HERO_W, '.').split('').reverse().join(''))
 }
 
-function critter(grid: string[][], action: Action, x: number, dir: 1 | -1, frame: number, body?: string) {
+/** The eye rows, shifted one column to glance left (-1) or right (1). */
+const GLANCES: readonly [string, string, string][] = [
+  [EYES, '.koookoo.', '.ookoook.'],
+  [ARMS_EYES, 'okoookooo', 'oookoooko'],
+]
+function glanced(rows: Sprite, look: -1 | 1): Sprite {
+  return rows.map(r => {
+    for (const [from, left, right] of GLANCES) if (r.includes(from)) return r.replace(from, look < 0 ? left : right)
+    return r
+  })
+}
+
+function critter(grid: string[][], action: Action, x: number, dir: 1 | -1, frame: number, body?: string, look?: -1 | 1 | null, rise = 0) {
   const raw = sprite(action, frame)
   const art = body ? raw.map(r => r.replaceAll('o', body)) : raw
-  const drawn = dir < 0 ? mirror(art) : art
-  const top = GROUND - drawn.length - lift(action, frame)
+  let drawn = dir < 0 ? mirror(art) : art
+  if (look && !body) drawn = glanced(drawn, look)
+  const top = GROUND - drawn.length - lift(action, frame) - rise
   paint(grid, drawn, Math.round(x), top)
   return top
 }
+
+const STARS: readonly [number, number][] = [[0, 0], [2, -1], [4, -1], [6, -1], [8, 0], [6, 1], [4, 1], [2, 1]]
+const TABLE: Sprite[] = [
+  ['sssss', 's...s'],
+  ['s...s', 'sssss'],
+]
 
 /** Hats are the body's width (9), sitting on the pixel rows just above the head. */
 const HATS: Record<Hat, Sprite> = {
@@ -609,7 +651,29 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   // April 1st: Claude walks backwards.
   const face: 1 | -1 = extras.holiday === 'aprilfools' && WALKING.has(hero.action) ? (hero.dir > 0 ? -1 : 1) : hero.dir
   const x = Math.round(hero.x)
-  const top = critter(grid, hero.action, hero.x, face, frame, extras.shiny ? 'n' : undefined)
+  // Dropping in: falls from the sky over the first ~0.7 s, then a puff on landing.
+  const dropAge = hero.action === 'drop' ? Math.max(0, now - hero.since) : Infinity
+  const fall = Math.max(0, Math.round(12 - dropAge / 60))
+  const glance = hero.glance && now < (hero.glanceUntil ?? 0) ? hero.glance : null
+  const top = critter(grid, hero.action, hero.x, face, frame, extras.shiny ? 'n' : undefined, glance, fall)
+  if (hero.action === 'drop' && fall === 0 && dropAge < 1100) {
+    paint(grid, ['w', '.w'], x - 2, GROUND - 2)
+    paint(grid, ['.w', 'w'], x + 9, GROUND - 2)
+  }
+  if (hero.action === 'dizzy') {
+    for (let n = 0; n < 2; n++) {
+      const [dx, dy] = STARS[(Math.floor(frame / 2) + n * 4) % STARS.length] ?? [0, 0]
+      paint(grid, ['z'], x + dx, Math.max(0, top - 2 + dy))
+    }
+  }
+  if (hero.action === 'flip') {
+    const k = frame % 10
+    const tx = face > 0 ? x + 8 + k : x + 4 - k - 5
+    paint(grid, TABLE[Math.floor(frame / 2) % 2] ?? [], tx, Math.max(0, top - 1 - Math.floor(k / 2)))
+  }
+  if (hero.action === 'sweep' && frame % 4 < 2) {
+    paint(grid, ['v.v'], face > 0 ? x + 12 + (frame % 3) : x - 4 - (frame % 3), GROUND - 2 - (frame % 2), true)
+  }
   if (extras.shiny && frame % 6 < 3) {
     paint(grid, ['z'], x + ((frame * 5) % 10), Math.max(0, top - 1))
     paint(grid, ['W'], x + ((frame * 11 + 7) % 10), top + 2)
@@ -700,6 +764,10 @@ const GLYPHS: Record<Action, readonly string[]> = {
   scratch: ['#'],
   look: ['◂', '▸'],
   cover: ['◡', '◠'],
+  dizzy: ['@', '◎'],
+  flip: ['┻━┻'],
+  sweep: ['⌇'],
+  drop: ['↓', '✓'],
   wink: [';'],
   fish: ['⌐', '¬'],
   reel: ['><>'],

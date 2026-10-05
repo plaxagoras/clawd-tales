@@ -19,6 +19,10 @@ export type Action =
   | 'wink'
   | 'fish'
   | 'reel'
+  | 'dizzy'
+  | 'flip'
+  | 'sweep'
+  | 'drop'
 
 /** A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly. */
 export type Emote = 'think' | 'blush' | 'sweat' | 'butterfly'
@@ -48,6 +52,9 @@ export type Hero = {
   emoteUntil?: number
   /** The last tool pose, which Claude dreams about. */
   last?: Action
+  /** Eyes glancing left or right until glanceUntil (clock ms). */
+  glance?: -1 | 1 | null
+  glanceUntil?: number
 }
 
 /** A spawned subagent, drawn as a tinted critter in the same scene. */

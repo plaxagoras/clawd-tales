@@ -18,7 +18,7 @@ Every tool call gets a pose and a one-line caption. Claude reads a book for `Rea
 |---|---|
 | A tool call | Clawd's pose and a caption naming the file, pattern or command |
 | A subagent starts | A helper walks in: purple for Opus, teal for Sonnet, green for Haiku, gold for Fable |
-| A subagent finishes | It runs back to Clawd and they cheer, with hearts. A failed one trips and leaves |
+| A subagent finishes | It runs back to Clawd and they cheer, with hearts |
 | A permission dialog opens | Clawd jumps next to a red `!` and the caption turns red |
 | A test run fails | Bugs drop onto the ground, one per failing test (up to 8) |
 | The tests go green | Clawd eats the bugs |
@@ -92,7 +92,7 @@ Your on/off and calm settings are saved between sessions.
 
 It is a Claude Code mod: a plugin of function hooks in `hooks/register.tsx`. It listens to `tool.call`, `agent.spawn`, `classic.PermissionRequest`, `classic.UserPromptSubmit` (for plan mode), `session.measure` and the turn events, and draws with `ui.render` on the `AbovePrompt` band. Each terminal cell is two pixels (`▀` with a foreground and a background color).
 
-- No network, no model calls, no files written. It only reads what the hooks hand it.
+- No network, no model calls. It only reads what the hooks hand it, and the only thing it saves is your settings (on/off, calm, hat, face) in Claude Code's plugin store.
 - Test results come from the `Bash` output of commands that look like test runs (`npm test`, `pytest`, `cargo test`, `go test` and similar).
 - Subagent end is detected by polling `$.agent.list()`.
 

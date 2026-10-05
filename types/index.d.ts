@@ -23,16 +23,26 @@ export type Action =
   | 'flip'
   | 'sweep'
   | 'drop'
+  | 'nod'
+  | 'dance'
+  | 'flag'
+  | 'listen'
+  | 'juggle'
+  | 'stretch'
 
-/** A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly. */
-export type Emote = 'think' | 'blush' | 'sweat' | 'butterfly'
+/**
+ * A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly;
+ * smitten adds heart eyes to the blush, sheepish adds worried brows to the sweat.
+ */
+export type Emote = 'think' | 'blush' | 'sweat' | 'butterfly' | 'smitten' | 'sheepish'
 
 /** Timed effects that cross or burst over the stage. */
-export type FxKind = 'confetti' | 'plane' | 'boxes' | 'train' | 'whale' | 'ufo'
-export type Fx = { id: number; kind: FxKind; start: number; dur: number; x: number }
+export type FxKind = 'confetti' | 'plane' | 'boxes' | 'train' | 'whale' | 'ufo' | 'warp'
+/** color: a palette key, for effects tinted per source (an MCP server's warp). */
+export type Fx = { id: number; kind: FxKind; start: number; dur: number; x: number; color?: string }
 
 export type Holiday = 'halloween' | 'christmas' | 'newyear' | 'valentine' | 'aprilfools'
-export type Hat = 'witch' | 'santa' | 'party' | 'nightcap' | 'crown' | 'tophat' | 'gradcap' | 'captain'
+export type Hat = 'witch' | 'santa' | 'party' | 'nightcap' | 'crown' | 'tophat' | 'gradcap' | 'captain' | 'wizard' | 'hardhat'
 /** Worn over the face: /tales face. */
 export type Face = 'glasses' | 'shades' | 'mustache'
 

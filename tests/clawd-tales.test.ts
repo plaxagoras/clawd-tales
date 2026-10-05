@@ -2,7 +2,24 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { HERO_W, STAGE_ROWS, glyph, lines, mirror, sprite, stage, tierOf, weatherOf } from '../hooks/art'
-import { bashEggs, beat, commitMessage, ending, fidgetAt, fishing, holidayOf, moodOf, notFound, restCaption, skyOf, testCounts } from '../hooks/story'
+import {
+  bashEggs,
+  beat,
+  commitMessage,
+  ending,
+  endingAction,
+  fidgetAt,
+  fishing,
+  holidayOf,
+  moodOf,
+  notFound,
+  restCaption,
+  skyOf,
+  testCounts,
+  tokenMilestone,
+  waitBeat,
+  warpColor,
+} from '../hooks/story'
 
 function world(on: On) {
   const clock = mock.clock(on)
@@ -17,7 +34,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -127,6 +144,46 @@ test('effects, emotes and a patted helper draw', () => {
   const patted = stage({ ...HERO, x: 20 }, [sad], 0, 80)
   expect(patted.some(r => r.includes('e'))).toBe(true) // grey helper
   expect(patted.some(r => r.includes('q'))).toBe(true) // with a heart
+})
+
+test('endings match the turn, and tokens have milestones', () => {
+  expect(endingAction(2, false)).toBe('nod')
+  expect(endingAction(20, false)).toBe('cheer')
+  expect(endingAction(90, false)).toBe('dance')
+  expect(endingAction(600, false)).toBe('flag')
+  expect(endingAction(600, true)).toBe('nod')
+  expect(tokenMilestone(40_000, 60_000)).toBe(50_000)
+  expect(tokenMilestone(60_000, 90_000)).toBe(null)
+  expect(tokenMilestone(90_000, 210_000)).toBe(200_000)
+  expect(ending(3, 12, false, 0, 100_000)).toBe('The end · 3 steps · 12s · 100K tokens!')
+  expect(waitBeat(1, 'Review the diff').action).toBe('listen')
+  expect(waitBeat(3).caption).toMatch(/juggles while 3 helpers/)
+  expect(warpColor('Gmail')).toBe(warpColor('Gmail'))
+  expect(new Set(['Gmail', 'n8n-mcp', 'blender', 'pubmed', 'deepl'].map(warpColor)).size).toBeGreaterThan(1)
+})
+
+test('outfits, heart eyes, brows, the boss tie, headphones, juggling and the warp draw', () => {
+  const plain = stage({ ...HERO }, [], 0, 60).join('\n')
+  const wizard = stage({ ...HERO }, [], 0, 60, { weather: 'clear', bugs: 0, todos: null, hat: 'wizard' }).join('')
+  expect(wizard.includes('b')).toBe(true)
+  const hard = stage({ ...HERO }, [], 0, 60, { weather: 'clear', bugs: 0, todos: null, hat: 'hardhat' }).join('')
+  expect(hard.includes('y')).toBe(true)
+  const smitten = stage({ ...HERO, emote: 'smitten' }, [], 0, 60).join('\n')
+  expect(smitten.includes('.qoqoqoq')).toBe(true) // heart eyes
+  const eyeRows = (rows: string[]) => rows.filter(r => r.includes('okoooko')).length
+  expect(eyeRows(stage({ ...HERO, emote: 'sheepish' }, [], 0, 60))).toBe(eyeRows(stage({ ...HERO }, [], 0, 60)) + 1) // brows
+  const tie = stage({ ...HERO }, [], 0, 60, { weather: 'clear', bugs: 0, todos: null, tie: true }).join('\n')
+  expect(tie.includes('Wr')).toBe(true)
+  expect(plain.includes('Wr')).toBe(false)
+  const music = stage({ ...HERO, action: 'listen' }, [], 0, 60).join('')
+  expect(music.includes('r') && music.includes('e')).toBe(true) // ear cups and band
+  const helpers = (['opus', 'haiku'] as const).map((tier, n) => ({ id: `w${n}`, label: 'x', tier, state: 'running', action: 'walk', x: 50, dir: 1, steps: 0 }) as const)
+  const juggling = stage({ ...HERO, action: 'juggle' }, [], 0, 40, { weather: 'clear', bugs: 0, todos: null })
+  const tinted = stage({ ...HERO, action: 'juggle' }, helpers, 0, 40).map(r => r.slice(0, 20)).join('')
+  expect(juggling.join('').includes('z')).toBe(true) // two plain balls with nobody out
+  expect(tinted.includes('p') && tinted.includes('h')).toBe(true) // the helpers' tints
+  const warp = [{ id: 1, kind: 'warp', start: 0, dur: 1200, x: 10, color: 'c' }] as const
+  expect(stage({ ...HERO }, [], 0, 60, { weather: 'clear', bugs: 0, todos: null, fx: warp, now: 300 }).join('').includes('c')).toBe(true)
 })
 
 test('context fill is weather', () => {
@@ -328,6 +385,69 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/Squeaky clean/)).toBeDefined()
     await $.session.compact({ trigger: 'precompute', messages: [{ role: 'user', text: 'hi', toolUses: [] }] } as never)
     expect(await see(/Squeaky clean/)).toBeDefined() // a precompute changes nothing
+  })
+
+  test(`turn length picks the ending, a helper's turn doesn't end Claude's, and tokens celebrate (${surface})`, async ($, on) => {
+    world(on)
+    on('prompt.submit', (_, e) => e as never)
+    on('turn.complete', () => ({ text: '' }) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    const see = async (text: RegExp, props = PROPS) => {
+      const band = await $.ui.mount({ ...BAND, props, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    const usage = (n: number) => ({ input_tokens: n, output_tokens: 0, cache_read_input_tokens: 9e6, cache_creation_input_tokens: 0, model: 'm' })
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.turn.complete({ answer: '', durationMs: 5000, isAborted: false, turnId: 'h', agentId: 'helper-1', reason: 'answer', usage: usage(30_000) } as never)
+    expect(await see(/The end/)).toBe(undefined)
+    await $.turn.complete({ answer: '', durationMs: 400_000, isAborted: false, turnId: 't', reason: 'answer', usage: usage(25_000) } as never)
+    expect(await see(/The end · 0 steps · 400s · 50K tokens!/)).toBeDefined()
+    expect(await see(/⚑/, { ...PROPS, maxRows: 3 })).toBeDefined() // the summit flag, as its one-line glyph
+    await $.prompt.submit({ text: 'again' } as never)
+    await $.turn.complete({ answer: '', durationMs: 2000, isAborted: false, turnId: 't2', reason: 'answer', usage: usage(1000) } as never)
+    expect(await see(/tokens!/)).toBe(undefined)
+    expect(await see(/^[·˙] $/, { ...PROPS, maxRows: 3 })).toBeDefined() // a quick nod, as its one-line glyph
+  })
+
+  test(`waiting on helpers: headphones, then juggling; a long sleep wakes at the reset (${surface})`, async ($, on) => {
+    const clock = world(on)
+    let release = () => {}
+    let spawned = 0
+    on('prompt.submit', (_, e) => e as never)
+    on('session.measure', (_, e) => ({ changed: e.changed }))
+    on('turn.complete', () => ({ text: '' }) as never)
+    on('agent.spawn', () => ({ agentId: `demo-a${++spawned}`, model: 'claude-haiku-4-5' }) as never)
+    on('tool.call', () => new Promise(r => (release = () => r({ result: {}, text: 'done' } as never))) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    const see = async (text: RegExp) => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    await $.prompt.submit({ text: 'fan out' } as never)
+    const call = $.tool.call({ tool: 'Agent', description: 'Scout the docs', prompt: 'x', tool_use_id: 'a1' } as never)
+    await $.agent.spawn({ description: 'Scout the docs', subagentType: 'general-purpose', prompt: 'x' } as never)
+    expect(await see(/headphones while “Scout the docs”/)).toBeDefined()
+    await $.agent.spawn({ description: 'Read the tests', subagentType: 'general-purpose', prompt: 'x' } as never)
+    expect(await see(/juggles while 2 helpers/)).toBeDefined()
+    release()
+    await call
+
+    await $.session.measure({
+      context: { window: 200000, percent: 10 },
+      rateLimits: [{ kind: 'five_hour', percentUsed: 100, resetsAt: new Date(80_000).toISOString() }],
+      changed: [],
+    } as never)
+    await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, turnId: 't', reason: 'answer' } as never)
+    await clock.advance(10_000)
+    expect(await see(/sleeps until the 5h limit/)).toBeDefined()
+    await clock.advance(15_000) // 25 s: within a minute of the reset at 80 s
+    expect(await see(/stretches/)).toBeDefined()
+    await clock.advance(60_000) // 85 s
+    expect(await see(/has reset/)).toBeDefined()
   })
 
   test(`a permission dialog makes Claude call for you, an auto-settled ask does not (${surface})`, async ($, on) => {

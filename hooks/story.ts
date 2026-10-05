@@ -94,10 +94,41 @@ export function tripCaption(tool: string, seed: string): string {
 
 export const THINKING = ['Claude ponders the path ahead…', 'Claude wanders, thinking…', 'Claude mutters to itself…']
 
-export function ending(steps: number, seconds: number, isAborted: boolean, best = 0): string {
+export function ending(steps: number, seconds: number, isAborted: boolean, best = 0, milestone: number | null = null): string {
   if (isAborted) return 'Claude stops mid-stride and takes a bow.'
   const s = steps === 1 ? 'step' : 'steps'
-  return `The end · ${steps} ${s} · ${seconds}s${best >= CROWN_AT ? ` · crown ×${best}` : ''}`
+  const tokens = milestone ? ` · ${Math.round(milestone / 1000)}K tokens!` : ''
+  return `The end · ${steps} ${s} · ${seconds}s${best >= CROWN_AT ? ` · crown ×${best}` : ''}${tokens}`
+}
+
+/** The closing pose by turn length: a nod for a quick one, a hop, a dance, then a flag at the summit. */
+export function endingAction(seconds: number, isAborted: boolean): Action {
+  if (isAborted || seconds < 4) return 'nod'
+  if (seconds < 60) return 'cheer'
+  if (seconds < 300) return 'dance'
+  return 'flag'
+}
+
+/** Every 50K tokens the session spends is a small party. */
+export const TOKEN_MILESTONE = 50_000
+/** The milestone crossed going from before to after, or null. */
+export function tokenMilestone(before: number, after: number): number | null {
+  const m = Math.floor(after / TOKEN_MILESTONE)
+  return m > Math.floor(before / TOKEN_MILESTONE) && m > 0 ? m * TOKEN_MILESTONE : null
+}
+
+/** Claude idles while the helpers work: headphones for one, juggling for more. */
+export function waitBeat(out: number, label?: string): Beat {
+  if (out <= 1) return { action: 'listen', caption: `Claude puts on headphones while ${label ? `“${clip(label, 30)}”` : 'the helper'} works…` }
+  return { action: 'juggle', caption: `Claude juggles while ${out} helpers work…` }
+}
+
+/** A stable palette key per MCP server, for its warp. */
+const WARP_COLORS = ['p', 't', 'h', 'f', 'c', 'q', 'O', 'b', 'z']
+export function warpColor(server: string): string {
+  let h = 0
+  for (let i = 0; i < server.length; i++) h = (h * 31 + server.charCodeAt(i)) | 0
+  return WARP_COLORS[Math.abs(h) % WARP_COLORS.length] ?? 'p'
 }
 
 /** Clean calls in a row that show a combo, and that earn the crown. */

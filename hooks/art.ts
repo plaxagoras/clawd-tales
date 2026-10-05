@@ -146,6 +146,29 @@ const TRIP: Sprite[] = [
   ['z.....z..', LEGS_B, HEAD, ARMS_EYES, '.okoooko.'],
 ]
 
+/** A short turn ends on a content blink, no fuss. */
+const NOD: Sprite[] = [STAND, [HEAD, HEAD, ARMS, HEAD, LEGS_A]]
+/** A long turn: one arm up, then the other, feet shuffling. */
+const DANCE: Sprite[] = [
+  ['o........', 'okoooooko', '.okoooko.', '.koooook.', LEGS_A],
+  ['........o', 'okoooooko', '.okoooko.', '.koooook.', LEGS_B],
+]
+/** A very long turn: a flag planted at the summit, flapping. */
+const FLAG: Sprite[] = [
+  ['.........srrr', '.ooooooo.srr.', '.okoooko.s...', 'ookoookoos...', '.ooooooo.s...', '.o.o.o.o.s'],
+  ['.........srr.', '.ooooooo.srrr', '.okoooko.s...', 'ookoookoos...', '.ooooooo.s...', '.o.o.o.o.s'],
+]
+/** Seated, juggling while the helpers work: arms take turns. The balls are drawn by the stage. */
+const JUGGLE: Sprite[] = [
+  ['o........', 'oooooooo.', EYES, '.okoookoo', HEAD],
+  ['........o', '.oooooooo', EYES, 'ookoooko.', HEAD],
+]
+/** Waking at the limit reset: arms high, eyes still shut. */
+const STRETCH: Sprite[] = [
+  ['o.......o', 'o.......o', HEAD, '.kkoookk.', HEAD, LEGS_A],
+  ['o.......o', HEAD, '.kkoookk.', HEAD, LEGS_A],
+]
+
 const UMBRELLA: Sprite = ['..UUUUU..', '.UUUUUUU.', 'U...s...U']
 const HEART: Sprite = ['q.q', '.q.']
 const ZED: Sprite = ['ww', '.w', 'ww']
@@ -163,6 +186,9 @@ function lift(action: Action, frame: number): number {
   if (action === 'alert') return frame % 4 < 2 ? 2 : 0
   // Seated, Clawd breathes: a one-pixel bob, the official idle.
   if (action === 'sit' || action === 'wink' || action === 'fish') return Math.floor(frame / 4) % 2
+  if (action === 'dance') return Math.floor(frame / 2) % 2
+  // Nodding along to the music.
+  if (action === 'listen') return Math.floor(frame / 3) % 2
   return 0
 }
 
@@ -215,6 +241,18 @@ export function sprite(action: Action, frame: number): Sprite {
       return REEL
     case 'run':
       return two ? STRIDE : STAND
+    case 'nod':
+      return NOD[frame % 10 < 6 ? 0 : 1] ?? STAND
+    case 'dance':
+      return DANCE[Math.floor(frame / 2) % 2] ?? CHEER
+    case 'flag':
+      return FLAG[Math.floor(frame / 3) % 2] ?? STAND
+    case 'listen':
+      return frame % 16 < 4 ? BLINK : SIT
+    case 'juggle':
+      return JUGGLE[Math.floor(frame / 2) % 2] ?? SIT
+    case 'stretch':
+      return STRETCH[Math.floor(frame / 5) % 2] ?? STAND
     default:
       return Math.floor(frame / 2) % 2 ? STRIDE : STAND
   }
@@ -302,6 +340,8 @@ export type Extras = {
   late?: boolean
   fx?: readonly Fx[]
   face?: Face | null
+  /** Three or more helpers out: the boss tie. */
+  tie?: boolean
 }
 
 const NONE: Extras = { weather: 'clear', bugs: 0, todos: null }
@@ -362,6 +402,8 @@ const HATS: Record<Hat, Sprite> = {
   tophat: ['..eeeee..', '..eeeee..', '..WWWWW..', '.eeeeeee.'],
   gradcap: ['eeeeeeeee', '..eeeeez.', '..eeeee.z'],
   captain: ['..WWWWW..', '.WWWzWWW.', 'eeeeeeeee'],
+  wizard: ['....b....', '...bbb...', '..bbzbb..', 'bbbbbbbbb'],
+  hardhat: ['...zzz...', '.zzzzzzz.', 'yyyyyyyyy'],
 }
 
 /** Face accessories, drawn from the eye row down. */
@@ -373,8 +415,16 @@ const FACES: Record<Face, Sprite> = {
 /** Which sprite row the eyes are on, per pose; poses without a usable face are left out. */
 const EYE_ROW: Partial<Record<Action, number>> = {
   walk: 1, run: 1, read: 1, dig: 1, sneak: 1, sit: 1, wave: 1, scratch: 1, look: 1, wink: 1, fish: 1,
-  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3,
+  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2,
 }
+/** Three or more helpers out: Claude is the boss, collar and tie under the eyes. */
+const TIE: Sprite = ['...WrW...', '....r....']
+/** Over each eye a heart, the notch filled in with the body color (B). */
+const HEART_EYES: Sprite = ['.qBq.qBq.', '..q...q..']
+/** Worried brows a row above the eyes: with the eyes glancing away they slant into a side-eye. */
+const BROWS: Sprite = ['..k...k..']
+const HEADPHONES: Sprite = ['..eeeee..', '.e.....e.', 'r.......r', 'r.......r']
+const NOTE: Sprite = ['.qq', '.q.', 'qq.']
 const BODY_W = 9
 
 /** The thought bubble, dots filling in. */
@@ -478,6 +528,17 @@ function effect(grid: string[][], fx: Fx, now: number, frame: number, cols: numb
     case 'ufo':
       paint(grid, UFO[frame % 2] ?? [], Math.round(cols - t * (cols + 10)), 0, true)
       return
+    case 'warp': {
+      // A ring of the server's color spreads from Claude and thins out.
+      const r = 1 + t * 6
+      const c = fx.color ?? 'p'
+      for (let n = 0; n < 10; n++) {
+        if (t > 0.6 && (n + frame) % 2 === 0) continue
+        const a = (n / 10) * Math.PI * 2 + t
+        paint(grid, [c], Math.round(fx.x + 4 + Math.cos(a) * r * 1.8), Math.round(GROUND - 4 + Math.sin(a) * r * 0.8), true)
+      }
+      return
+    }
   }
 }
 
@@ -537,8 +598,21 @@ function snow(grid: string[][], cols: number, frame: number) {
   }
 }
 
-function emote(grid: string[][], kind: Emote, x: number, dir: 1 | -1, top: number, frame: number) {
+/** A sprite over the body, anchored like hats and face gear, flipped with Claude. */
+function onBody(grid: string[][], art: Sprite, x: number, dir: 1 | -1, y: number) {
+  paint(grid, dir > 0 ? art : art.map(r => r.padEnd(BODY_W, '.').split('').reverse().join('')), dir > 0 ? x : x + HERO_W - BODY_W, y)
+}
+
+function emote(grid: string[][], kind: Emote, x: number, dir: 1 | -1, top: number, frame: number, eyes?: number, body = 'o') {
   switch (kind) {
+    case 'smitten':
+      if (eyes !== undefined) onBody(grid, HEART_EYES.map(r => r.replaceAll('B', body)), x, dir, top + eyes)
+      emote(grid, 'blush', x, dir, top, frame)
+      return
+    case 'sheepish':
+      if (eyes !== undefined) onBody(grid, BROWS, x, dir, top + eyes - 1)
+      emote(grid, 'sweat', x, dir, top, frame)
+      return
     case 'think': {
       // Clear of a hat brim on the side Claude faces.
       const art = bubble(frame)
@@ -654,7 +728,8 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   // Dropping in: falls from the sky over the first ~0.7 s, then a puff on landing.
   const dropAge = hero.action === 'drop' ? Math.max(0, now - hero.since) : Infinity
   const fall = Math.max(0, Math.round(12 - dropAge / 60))
-  const glance = hero.glance && now < (hero.glanceUntil ?? 0) ? hero.glance : null
+  // Heart eyes stay put; any other time the eyes may wander.
+  const glance = hero.glance && now < (hero.glanceUntil ?? 0) && hero.emote !== 'smitten' ? hero.glance : null
   const top = critter(grid, hero.action, hero.x, face, frame, extras.shiny ? 'n' : undefined, glance, fall)
   if (hero.action === 'drop' && fall === 0 && dropAge < 1100) {
     paint(grid, ['w', '.w'], x - 2, GROUND - 2)
@@ -688,6 +763,21 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   if (wear && eyes !== undefined) {
     paint(grid, face > 0 ? wear : wear.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - BODY_W, top + eyes)
   }
+  if (extras.tie && eyes !== undefined) onBody(grid, TIE, x, face, top + eyes + 1)
+  if (hero.action === 'listen') paint(grid, HEADPHONES, x, top - 2)
+  if ((hero.action === 'listen' || hero.action === 'dance') && frame % 12 < 8) {
+    paint(grid, NOTE, face > 0 ? x + 10 : x - 3, Math.max(0, top - 2 - (Math.floor(frame / 4) % 2)), true)
+  }
+  if (hero.action === 'juggle') {
+    // One ball per helper out, in its tint, on an arc over Claude's head.
+    const balls = workers.filter(w => w.state === 'running').slice(0, 4)
+    const n = Math.max(2, balls.length)
+    for (let i = 0; i < n; i++) {
+      const a = frame * 0.45 + (i * Math.PI * 2) / n
+      const tint = balls[i] ? TINT[balls[i]!.tier] : 'z'
+      paint(grid, [tint], Math.round(x + 4 + Math.cos(a) * 5), Math.max(0, Math.round(top - 2 - Math.abs(Math.sin(a)) * 3)))
+    }
+  }
   if (hero.action === 'fish' || hero.action === 'reel') fishingLine(grid, hero.action, x, face, top, frame, cols)
   if (wet === 'rain' || wet === 'storm') paint(grid, UMBRELLA, x, Math.max(0, top - 3))
   if (hero.action === 'sleep') {
@@ -701,7 +791,7 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   if (extras.late && (hero.action === 'sit' || hero.action === 'look' || hero.action === 'scratch' || hero.action === 'wave')) {
     paint(grid, MUG[Math.floor(frame / 3) % 2] ?? [], face > 0 ? x + 10 : x - 1, GROUND - 4)
   }
-  if (hero.emote) emote(grid, hero.emote, x, face, top, frame)
+  if (hero.emote) emote(grid, hero.emote, x, face, top, frame, eyes, extras.shiny ? 'n' : 'o')
   if (hero.action === 'cheer' && workers.some(w => w.state === 'done')) {
     paint(grid, HEART, x + 3, Math.max(0, top - 2))
   }
@@ -771,6 +861,12 @@ const GLYPHS: Record<Action, readonly string[]> = {
   wink: [';'],
   fish: ['⌐', '¬'],
   reel: ['><>'],
+  nod: ['·', '˙'],
+  dance: ['♪', '♫'],
+  flag: ['⚑'],
+  listen: ['♪'],
+  juggle: ['∘°', '°∘'],
+  stretch: ['\\o/'],
 }
 
 export function glyph(action: Action, frame: number): string {

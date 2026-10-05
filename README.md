@@ -24,8 +24,12 @@ Every tool call gets a pose and a one-line caption. Claude reads a book for `Rea
 | The tests go green | Clawd eats the bugs |
 | A todo list | Pending items sit on the ground as pellets. Finishing one is a gobble |
 | Context fills up | Clouds at 50%, rain and an umbrella at 70%, lightning at 85% |
-| The turn ends | A cheer, then Clawd sits, yawns and falls asleep. The band hides after 3 minutes; your next prompt wakes Clawd, and a new helper brings the band back |
-| A plan limit hits 100% | Clawd sleeps until the reset time |
+| The turn ends | A nod if it took under 4 seconds, a hop up to a minute, a dance up to five, and past that a flag planted at the summit. Then Clawd sits, yawns and falls asleep. The band hides after 3 minutes; your next prompt wakes Clawd, and a new helper brings the band back |
+| A plan limit hits 100% | Clawd sleeps until the reset time. A minute before, it stretches, and once the limit resets it's up |
+| Claude waits on a subagent | Clawd puts on headphones. With two or more out, it juggles one ball per helper, each in that helper's color |
+| Three or more subagents out | Clawd wears a tie. It's the boss now |
+| An MCP tool call | A ring of color spreads from Clawd. Each server gets its own color |
+| Every 50K tokens | Confetti, and the count in the turn's last caption |
 | Claude thinks for a while between tool calls | A thought bubble fills in over the pose it is holding |
 | Five clean tool calls in a row | A combo counter. At ten, Clawd wears a crown |
 | A subagent fails | It trips, then walks back to Clawd for a pat on the head |
@@ -37,7 +41,8 @@ Every tool call gets a pose and a one-line caption. Claude reads a book for `Rea
 
 ### Small things
 
-- Thank Claude in your prompt and Clawd blushes. Start with "no" or "wrong" and it rubs its head.
+- Thank Claude in your prompt and Clawd blushes with heart eyes. Start with "no" or "wrong" and it rubs its head, brows up, and can't look you in the eye.
+- Clawd dresses for the job: a wizard hat in plan mode, a hard hat two minutes into a long turn, and shades for the rest of a turn once it has earned the crown.
 - `git commit` wraps a parcel and pops confetti. `git push` sends a paper plane off the stage. `rm -rf` makes Clawd cover its eyes. Package installs drop boxes from the sky.
 - A command that isn't found sends the `sl` train across the stage.
 - While it waits for you, Clawd waves, winks, scratches its head, looks around and watches a butterfly. A longer wait and it goes fishing. Asleep, it dreams about the last thing it did.
@@ -77,7 +82,7 @@ claude --plugin-dir ./clawd-tales
 | `/tales lively` | Back to 5 frames a second (the default) |
 | `/tales off` / `/tales on` | Hide or show the band |
 | `/tales` | Shows the current state |
-| `/tales hat <name>` | Puts on a top hat, grad cap or captain's hat (`none` takes it off). Saved between sessions |
+| `/tales hat <name>` | Puts on a top hat, grad cap, captain's hat, wizard hat or hard hat (`none` takes it off). Saved between sessions |
 | `/tales face <name>` | Glasses, shades or a mustache (`none` takes them off). Saved between sessions |
 | `/tales holiday <name>` | Previews a holiday look until the next restart (`auto` goes back to the calendar) |
 
@@ -85,7 +90,7 @@ Your on/off and calm settings are saved between sessions.
 
 ## How it works
 
-It is a Claude Code mod: a plugin of function hooks in `hooks/register.tsx`. It listens to `tool.call`, `agent.spawn`, `classic.PermissionRequest`, `session.measure` and the turn events, and draws with `ui.render` on the `AbovePrompt` band. Each terminal cell is two pixels (`▀` with a foreground and a background color).
+It is a Claude Code mod: a plugin of function hooks in `hooks/register.tsx`. It listens to `tool.call`, `agent.spawn`, `classic.PermissionRequest`, `classic.UserPromptSubmit` (for plan mode), `session.measure` and the turn events, and draws with `ui.render` on the `AbovePrompt` band. Each terminal cell is two pixels (`▀` with a foreground and a background color).
 
 - No network, no model calls, no files written. It only reads what the hooks hand it.
 - Test results come from the `Bash` output of commands that look like test runs (`npm test`, `pytest`, `cargo test`, `go test` and similar).

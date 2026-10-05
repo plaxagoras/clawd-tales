@@ -15,6 +15,7 @@ import {
   eggBeat,
   eggDone,
   ending,
+  endingAction,
   fidgetAt,
   fishing,
   holidayOf,
@@ -26,7 +27,10 @@ import {
   skyOf,
   startCaption,
   testCounts,
+  tokenMilestone,
   tripCaption,
+  waitBeat,
+  warpColor,
 } from './story'
 
 const IDLE: Hero = { mode: 'idle', action: 'walk', caption: '', x: 0, dir: 1, scene: 0, steps: 0, since: 0 }
@@ -58,7 +62,7 @@ const THINK_POSE_MS = 8000 // no tool call for this long mid-turn: a thought bub
 const MOOD_MS = 4000 // a blush or a sweat drop lasts this long
 const VISITOR_ODDS = 1 / 25 // per prompt
 const SHINY_ODDS = 1 / 100 // per session
-const FX_MS: Record<FxKind, number> = { confetti: 2200, plane: 3500, boxes: 6000, train: 8000, whale: 16000, ufo: 10000 }
+const FX_MS: Record<FxKind, number> = { confetti: 2200, plane: 3500, boxes: 6000, train: 8000, whale: 16000, ufo: 10000, warp: 1200 }
 const HOLIDAYS: readonly Holiday[] = ['halloween', 'christmas', 'newyear', 'valentine', 'aprilfools']
 
 // Module-level: a reload starts these over, and session.start picks the story back up.
@@ -76,12 +80,19 @@ let holidayPick: Holiday | 'none' | null = null // /tales holiday: a preview, th
 let alertAt: number | null = null // when the current call for the user began
 let errStreak = 0 // main-loop errors in a row
 let nextGlanceAt = 0
+let planMode = false // the last prompt went in under plan mode: the wizard hat
+let agentCalls = 0 // main-loop Agent calls still running: Claude is waiting on helpers
+let sessionTokens = 0 // input, cache writes and output this session; cache reads left out
+let tokensSeen = 0 // the count at the last main-loop ending, so a helper's crossing waits for it
+const HARDHAT_MS = 120_000 // two minutes into a turn: hard hat on
+const WAKE_MS = 60_000 // a minute before a limit resets, Claude stretches; a minute after, it's up
+const TIE_AT = 3 // helpers out for the boss tie
 const FAST_YES_MS = 6000 // approved and done this fast: hearts
 const NERVOUS_MS = 30_000 // a call for the user waiting this long: a sweat drop and a timer
 const FLIP_MS = 4000
 let wornHat: Hat | null = null // /tales hat, saved in $.store
 let wornFace: Face | null = null // /tales face, saved in $.store
-const HATS_TO_WEAR: readonly Hat[] = ['tophat', 'gradcap', 'captain', 'witch', 'santa', 'party', 'nightcap', 'crown']
+const HATS_TO_WEAR: readonly Hat[] = ['tophat', 'gradcap', 'captain', 'wizard', 'hardhat', 'witch', 'santa', 'party', 'nightcap', 'crown']
 const FACES_TO_WEAR: readonly Face[] = ['glasses', 'shades', 'mustache']
 const workerBeatAt = new Map<string, number>()
 const workerTripUntil = new Map<string, number>()
@@ -101,7 +112,11 @@ function walk<T extends { x: number; dir: 1 | -1 }>(it: T, action: Action): T {
 
 /** The rest ladder, by time since the turn's cheer ended. Null once Claude has gone. */
 function restStep(since: number, now: number, lim: Limit | null, last?: Action): Pick<Hero, 'action' | 'caption' | 'emote'> | null {
-  if (lim && lim.percent >= 100) {
+  const resets = lim?.resetsAt ? Date.parse(lim.resetsAt) : NaN
+  // The figure stays at 100 until the next response, so past the reset the clock decides.
+  if (lim && lim.percent >= 100 && !(now >= resets + WAKE_MS)) {
+    if (now >= resets) return { action: 'cheer', caption: `The ${lim.kind} limit has reset. Claude is up and ready!`, emote: null }
+    if (now >= resets - WAKE_MS) return { action: 'stretch', caption: `Claude stretches. The ${lim.kind} limit resets at ${clockTime(lim.resetsAt)}.`, emote: null }
     return { action: 'sleep', caption: `Claude sleeps until the ${lim.kind} limit resets at ${clockTime(lim.resetsAt)}. z z z`, emote: null }
   }
   const t = now - since
@@ -194,7 +209,8 @@ function ensureTimer($: EngineInterface) {
       if (!cur.emote && heroCalls === 0 && now - lastCallAt >= THINK_POSE_MS && next.action !== 'trip' && next.action !== 'sweep') {
         next = { ...next, emote: 'think', emoteUntil: Infinity }
       }
-      if (!isCalm) next = walk(next, next.action)
+      // Waiting on an Agent call, Claude sits with the helpers' music or juggling: no wandering.
+      if (!isCalm && agentCalls === 0) next = walk(next, next.action)
       if (next !== cur) await update($, hero, () => next)
     }
 
@@ -361,17 +377,28 @@ async function begin($: EngineInterface, text = '') {
     scene: cur.mode === 'idle' ? (cur.scene + 1) % SCENE_COUNT : cur.scene,
     steps: 0,
     since: now,
-    emote: mood === 'thanks' ? 'blush' : mood === 'scold' ? 'sweat' : null,
+    emote: mood === 'thanks' ? 'smitten' : mood === 'scold' ? 'sheepish' : null,
     emoteUntil: now + MOOD_MS,
+    // Scolded, Claude can't quite look you in the eye.
+    glance: mood === 'scold' ? -1 : cur.glance,
+    glanceUntil: mood === 'scold' ? now + MOOD_MS : cur.glanceUntil,
   }))
   ensureTimer($)
 }
 
-async function close($: EngineInterface, caption: string) {
+async function close($: EngineInterface, caption: string, action: Action = 'cheer') {
   const now = await $.clock.now()
   await update($, alert, () => null)
-  await update($, hero, (cur): Hero => ({ ...cur, mode: 'ending', action: 'cheer', caption, since: now, emote: null }))
+  await update($, hero, (cur): Hero => ({ ...cur, mode: 'ending', action, caption, since: now, emote: null }))
   ensureTimer($)
+}
+
+/** An MCP call: a puff in the server's own color as Claude warps a message off. */
+async function onMcp($: EngineInterface, tool: string) {
+  const server = tool.split('__')[1] ?? tool
+  const x = (await read($, hero)).x
+  await addFx($, 'warp', x)
+  await update($, fx, list => list.map(f => (f.kind === 'warp' && f.id === fxId ? { ...f, color: warpColor(server) } : f)))
 }
 
 /** Test output: failures drop bugs into the scene, a green run lets Claude eat them. */
@@ -483,6 +510,8 @@ function runDemo($: EngineInterface) {
     acts.forEach((a, i) => at(t + 1500 + i * 2500, () => workerBeat($, id, a, false)))
     at(t + 1500 + acts.length * 2500 + n * 600, () => finish($, id, end))
   })
+  at(16500, () => heroBeat($, beat('mcp__claude_ai_Gmail__search_threads', {}, 'demo16500')))
+  at(16500, () => onMcp($, 'mcp__claude_ai_Gmail__search_threads'))
   at(24500, () => maybeVisitor($, 'whale'))
   at(25000, () => heroBeat($, eggBeat('commit', 'git commit -m "Teach Clawd new tricks"')))
   at(26000, async () => {
@@ -491,11 +520,14 @@ function runDemo($: EngineInterface) {
   })
   at(28000, () => close($, ending(9, 28, false, 12)))
   at(40000, () => update($, context, () => 30))
+  at(40000, () => update($, todos, () => null)) // the fable's quest list leaves with it
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, demo, hat, face' })
+    sessionTokens = 0
+    tokensSeen = 0
     const hatSaved = await $.store.get('hat')
     wornHat = HATS_TO_WEAR.includes(hatSaved as Hat) ? (hatSaved as Hat) : null
     const faceSaved = await $.store.get('face')
@@ -566,6 +598,12 @@ export const register: Register = on => {
     return { text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}). Use /tales on|off|calm|lively|demo, /tales hat <name>, /tales face <name>.${sparkle}` }
   })
 
+  // Plan mode only shows on the classic hook's input; a mid-turn shift+tab waits for the next prompt.
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    planMode = e.permission_mode === 'plan'
+    return next(e)
+  })
+
   on('prompt.submit', async ($, e, next) => {
     await begin($, e.text)
     maybeVisitor($)
@@ -613,7 +651,10 @@ export const register: Register = on => {
       await update($, alert, () => (e.tool === 'ExitPlanMode' ? 'Claude needs you: approve the plan?' : 'Claude needs you: a question is waiting'))
       ensureTimer($)
     }
+    const delegates = !owner && e.tool === 'Agent'
+    if (!owner && e.tool.startsWith('mcp__')) await onMcp($, e.tool)
     if (!owner) heroCalls += 1
+    if (delegates) agentCalls += 1
     let result: Awaited<ReturnType<typeof next>>
     try {
       result = await next(e)
@@ -622,7 +663,9 @@ export const register: Register = on => {
         heroCalls = Math.max(0, heroCalls - 1)
         lastCallAt = await $.clock.now()
       }
+      if (delegates) agentCalls = Math.max(0, agentCalls - 1)
     }
+    if (e.tool === 'ExitPlanMode' && result.deny === undefined && !result.isError) planMode = false
     // Whatever it was waiting on, the call has gone ahead (or been refused).
     const waited = alertAt !== null && (await read($, alert)) ? (await $.clock.now()) - alertAt : null
     alertAt = null
@@ -707,10 +750,17 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    const u = e.usage
+    if (u) sessionTokens += u.input_tokens + u.cache_creation_input_tokens + u.output_tokens
+    // A helper's turn ends inside the main one: it counts toward tokens, not toward the ending.
+    if (e.agentId) return next(e)
     const cur = await read($, hero)
     if (cur.mode === 'working') {
-      const seconds = Math.round(((await $.clock.now()) - startedAt) / 1000)
-      await close($, ending(cur.steps, seconds, e.isAborted, best))
+      const seconds = Math.round((e.durationMs ?? (await $.clock.now()) - startedAt) / 1000)
+      const crossed = tokenMilestone(tokensSeen, sessionTokens)
+      tokensSeen = sessionTokens
+      await close($, ending(cur.steps, seconds, e.isAborted, best, crossed), endingAction(seconds, e.isAborted))
+      if (crossed) await addFx($, 'confetti', cur.x)
     }
     return next(e)
   })
@@ -726,9 +776,12 @@ export const register: Register = on => {
     const rows = e.props.maxRows ?? 12
     const f = await read($, frame)
     const out = crew.filter(w => w.state === 'running').length || crew.length
+    const running = crew.filter(w => w.state === 'running')
     let shown: Hero = cur
-    // Turn over, helpers still out: Claude sits and reads while they work.
-    if (cur.mode === 'idle') shown = { ...cur, action: 'read', caption: `Claude waits on ${out} helper${out === 1 ? '' : 's'}…` }
+    // Turn over, or the main loop blocked on an Agent call: Claude idles while the helpers work.
+    if (cur.mode === 'idle' || (cur.mode === 'working' && agentCalls > 0 && running.length > 0)) {
+      shown = { ...cur, ...waitBeat(out, running[0]?.label ?? crew[0]?.label) }
+    }
     if (asking) {
       const waited = alertAt !== null ? Math.floor(((await $.clock.now()) - alertAt) / 1000) : 0
       const nervous = waited * 1000 >= NERVOUS_MS
@@ -768,11 +821,12 @@ export const register: Register = on => {
     const holiday = holidayNow(day)
     const hour = day.getHours()
     const streak = await read($, combo)
+    const holidayHat: Hat | null = holiday === 'halloween' ? 'witch' : holiday === 'christmas' ? 'santa' : holiday === 'newyear' ? 'party' : null
+    const longHaul = cur.mode === 'working' && now - startedAt >= HARDHAT_MS
     const hat: Hat | null =
       streak >= CROWN_AT
         ? 'crown'
-        : wornHat ??
-          (holiday === 'halloween' ? 'witch' : holiday === 'christmas' ? 'santa' : holiday === 'newyear' ? 'party' : isLate(hour) ? 'nightcap' : null)
+        : (wornHat ?? (planMode ? 'wizard' : null) ?? holidayHat ?? (longHaul ? 'hardhat' : null) ?? (isLate(hour) ? 'nightcap' : null))
     const extras = {
       weather: weatherOf(await read($, context)),
       bugs: await read($, bugs),
@@ -785,7 +839,9 @@ export const register: Register = on => {
       shiny: (await read($, shiny)) === true,
       late: isLate(hour),
       fx: await read($, fx),
-      face: wornFace,
+      // Earned the crown this turn: shades on, the cool kind.
+      face: wornFace ?? (best >= CROWN_AT ? 'shades' : null),
+      tie: running.length >= TIE_AT,
     }
     const all = lines(stage(shown, crew, f, cols, extras))
     // Standing Claude reaches the second line; only the alert crop cuts into him.

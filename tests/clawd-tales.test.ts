@@ -124,6 +124,34 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/dozes|sits|The end/)).toBe(undefined)
   })
 
+  test(`Claude holds a pose through a slow tool and a long think (${surface})`, async ($, on) => {
+    const clock = world(on)
+    let release = () => {}
+    on('prompt.submit', (_, e) => e as never)
+    on('tool.call', () => new Promise(r => (release = () => r({ result: { stdout: 'built', stderr: '' }, text: 'built' } as never))) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    await $.prompt.submit({ text: 'build it' } as never)
+    const see = async (text: RegExp) => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    const pose = /slow build/i
+    const thinking = /ponders|wanders, thinking|mutters/
+
+    const call = $.tool.call({ tool: 'Bash', command: 'make', description: 'Run the slow build', tool_use_id: 't1' } as never)
+    await clock.advance(30000) // the tool is still running
+    expect(await see(pose)).toBeDefined()
+    expect(await see(thinking)).toBe(undefined)
+
+    release()
+    await call
+    await clock.advance(60000) // a long think after the call: the pose stays
+    expect(await see(pose)).toBeDefined()
+    expect(await see(thinking)).toBe(undefined)
+  })
+
   test(`a permission dialog makes Claude call for you, an auto-settled ask does not (${surface})`, async ($, on) => {
     world(on)
     on('tool.check', () => ({ decision: 'ask' }))

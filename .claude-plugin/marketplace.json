@@ -3,7 +3,7 @@
   "owner": { "name": "plaxagoras" },
   "metadata": {
     "description": "clawd-tales: a pixel Clawd that acts out what Claude Code is doing, in the terminal",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "plugins": [
     {

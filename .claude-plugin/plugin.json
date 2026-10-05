@@ -1,6 +1,6 @@
 {
   "name": "clawd-tales",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A pixel Clawd acts out every tool call above the prompt; helpers wander in by model color. Terminal-first, no model calls.",
   "author": { "name": "plaxagoras", "url": "https://github.com/plaxagoras" },
   "repository": "https://github.com/plaxagoras/clawd-tales",

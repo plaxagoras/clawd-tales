@@ -21,7 +21,7 @@ const todos = atom({ plugin: 'clawd-tales', key: 'todos' } as const, null)
 const TICK_MS = 200
 const CALM_TICK_MS = 1000 // calm mode: one beat a second
 const POLL_EVERY = 5 // ticks between $.agent.list() checks
-const THINK_AFTER_MS = 4000 // no tool call for this long: back to wandering
+const THINK_AFTER_MS = 15000 // a helper with no tool call for this long wanders again
 const TRIP_MS = 2500
 const LINGER_MS = 8000 // the closing cheer lasts this long, then the rest ladder
 const HUG_MS = 3000 // a helper that made it back stays this long with hearts
@@ -33,7 +33,7 @@ let timer: Timer | undefined
 let isCalm = false // mirrors the calm atom for the tick's own pacing
 let ticks = 0
 let cols = 100
-let lastBeatAt = 0
+let heroCalls = 0 // main-loop tool calls still running: a trip waits for them to end
 let tripUntil = 0
 let startedAt = 0
 const workerBeatAt = new Map<string, number>()
@@ -93,7 +93,9 @@ function ensureTimer($: EngineInterface) {
 
     if (cur.mode === 'working' && !(await read($, alert))) {
       let next: Hero = cur
-      if (now - lastBeatAt > THINK_AFTER_MS && now >= tripUntil && cur.action !== 'walk') {
+      // Claude keeps the last pose through the model's thinking until the next tool call;
+      // only a trip, once played, goes back to wandering.
+      if (cur.action === 'trip' && heroCalls === 0 && now >= tripUntil) {
         next = { ...next, action: 'walk', caption: THINKING[f % THINKING.length] ?? '' }
       }
       if (!isCalm) next = walk(next, next.action)
@@ -200,14 +202,13 @@ async function workerBeat($: EngineInterface, id: string, action: Action, isErro
 
 /** A main-thread beat: action and caption, unless Claude is waiting on the user. */
 async function heroBeat($: EngineInterface, b: Pick<Hero, 'action' | 'caption'>, step = 1) {
-  lastBeatAt = await $.clock.now()
   await update($, hero, (cur): Hero => (cur.mode === 'working' ? { ...cur, ...b, steps: cur.steps + step } : cur))
 }
 
 async function begin($: EngineInterface) {
   const now = await $.clock.now()
   startedAt = now
-  lastBeatAt = now
+  heroCalls = 0
   tripUntil = 0
   await update($, alert, () => null)
   await update($, hero, (cur): Hero => ({
@@ -402,7 +403,15 @@ export const register: Register = on => {
       await update($, alert, () => (e.tool === 'ExitPlanMode' ? 'Claude needs you: approve the plan?' : 'Claude needs you: a question is waiting'))
       ensureTimer($)
     }
-    const result = await next(e)
+    if (!owner) heroCalls += 1
+    let result: Awaited<ReturnType<typeof next>>
+    try {
+      result = await next(e)
+    } finally {
+      if (!owner) {
+        heroCalls = Math.max(0, heroCalls - 1)
+      }
+    }
     // Whatever it was waiting on, the call has gone ahead (or been refused).
     await update($, alert, () => null)
     if (result.deny !== undefined || result.isError) {

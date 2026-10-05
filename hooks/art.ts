@@ -7,7 +7,7 @@
 import type { Action, Emote, Face, Fx, Hat, Hero, Holiday, Worker } from '../types'
 
 const PALETTE: Record<string, string> = {
-  o: '#d97757', // Claude orange
+  o: '#d77757', // Clawd's body color in the Claude Code binary
   k: '#1f1e1d', // ink
   p: '#9b7fd4', // Opus purple
   t: '#5fb8b0', // Sonnet teal

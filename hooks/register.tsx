@@ -672,7 +672,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column">
           <Box flexDirection="row">
-            <Text color={asking ? '#e5534b' : '#d97757'}>{`${glyph(shown.action, f)} `}</Text>
+            <Text color={asking ? '#e5534b' : '#d77757'}>{`${glyph(shown.action, f)} `}</Text>
             {caption}
           </Box>
           {below}

@@ -239,12 +239,14 @@ export const FIDGETS: readonly Fidget[] = [
   { action: 'scratch', caption: 'Claude scratches its head.' },
   { action: 'look', caption: 'Claude looks around.' },
   { action: 'sit', caption: 'A butterfly visits Claude.', emote: 'butterfly' },
+  { action: 'wink', caption: 'Claude winks at you.' },
 ]
 export const FIDGET_SLOT_MS = 7000
 export const FIDGET_MS = 3000
 
 /** While sitting: a fidget for the first few seconds of every slot but the first. */
 export function fidgetAt(sitFor: number, seed: number): Fidget | null {
+  if (sitFor >= REST.fishMs) return null
   const slot = Math.floor(sitFor / FIDGET_SLOT_MS)
   if (slot === 0 || sitFor - slot * FIDGET_SLOT_MS >= FIDGET_MS) return null
   return FIDGETS[Math.abs(seed + slot * 7) % FIDGETS.length] ?? null
@@ -279,7 +281,19 @@ export function testCounts(command: string, output: string): { failed: number; p
   return { failed: Math.max(0, failed), passed: Math.max(0, passed) }
 }
 
-export const REST = { sitMs: 40_000, yawnMs: 48_000, hideMs: 180_000 }
+export const REST = { fishMs: 15_000, sitMs: 45_000, yawnMs: 53_000, hideMs: 180_000 }
+
+/** A long wait: Claude casts a line, and every so often something bites. */
+export const BITE_EVERY_MS = 12_000
+export const BITE_MS = 3_000
+export function fishing(sitFor: number): Fidget | null {
+  if (sitFor < REST.fishMs || sitFor >= REST.sitMs) return null
+  const t = sitFor - REST.fishMs
+  if (t > BITE_MS && t % BITE_EVERY_MS < BITE_MS) {
+    return { action: 'reel', caption: 'A bite! Claude reels in a fish… and lets it go.' }
+  }
+  return { action: 'fish', caption: 'Claude casts a line while it waits for you.' }
+}
 
 export function restCaption(action: 'sit' | 'yawn' | 'sleep', last?: Action): string {
   if (action === 'sit') return 'Claude sits by the path and waits for you.'

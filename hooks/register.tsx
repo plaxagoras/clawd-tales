@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Action, Emote, Fx, FxKind, Hat, Hero, Holiday, Limit, Worker } from '../types'
+import type { Action, Emote, Face, Fx, FxKind, Hat, Hero, Holiday, Limit, Worker } from '../types'
 import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lines, speed, stage, tierOf, weatherOf } from './art'
 import type { Egg } from './story'
 import {
@@ -16,6 +16,7 @@ import {
   eggDone,
   ending,
   fidgetAt,
+  fishing,
   holidayOf,
   isLate,
   isMidnightNewYear,
@@ -72,6 +73,10 @@ let lastCallAt = 0 // the last main-loop tool call's end, for the thought bubble
 let best = 0 // the turn's best combo
 let fxId = 0
 let holidayPick: Holiday | 'none' | null = null // /tales holiday: a preview, this load only
+let wornHat: Hat | null = null // /tales hat, saved in $.store
+let wornFace: Face | null = null // /tales face, saved in $.store
+const HATS_TO_WEAR: readonly Hat[] = ['tophat', 'gradcap', 'captain', 'witch', 'santa', 'party', 'nightcap', 'crown']
+const FACES_TO_WEAR: readonly Face[] = ['glasses', 'shades', 'mustache']
 const workerBeatAt = new Map<string, number>()
 const workerTripUntil = new Map<string, number>()
 const returningSince = new Map<string, number>()
@@ -96,7 +101,7 @@ function restStep(since: number, now: number, lim: Limit | null, last?: Action):
   const t = now - since
   if (t >= REST.hideMs) return null
   const action = t < REST.sitMs ? 'sit' : t < REST.yawnMs ? 'yawn' : 'sleep'
-  const fidget = action === 'sit' ? fidgetAt(t, Math.floor(since / 1000)) : null
+  const fidget = action === 'sit' ? (fishing(t) ?? fidgetAt(t, Math.floor(since / 1000))) : null
   if (fidget) return { action: fidget.action, caption: fidget.caption, emote: fidget.emote ?? null }
   return { action, caption: restCaption(action, last), emote: null }
 }
@@ -470,7 +475,11 @@ function runDemo($: EngineInterface) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, or demo' })
+    await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, demo, hat, face' })
+    const hatSaved = await $.store.get('hat')
+    wornHat = HATS_TO_WEAR.includes(hatSaved as Hat) ? (hatSaved as Hat) : null
+    const faceSaved = await $.store.get('face')
+    wornFace = FACES_TO_WEAR.includes(faceSaved as Face) ? (faceSaved as Face) : null
     const saved = await $.store.get('isOn')
     if (typeof saved === 'boolean') await update($, isOn, () => saved)
     const savedCalm = await $.store.get('calm')
@@ -504,13 +513,27 @@ export const register: Register = on => {
       await $.store.set('calm', arg === 'calm')
       return { text: arg === 'calm' ? 'Calm: one beat a second, Claude stays put between tool calls.' : 'Lively: 5 fps, wandering on.' }
     }
+    const [word, name] = arg.split(/\s+/)
     if (arg === 'demo') {
       await begin($)
       runDemo($)
       return { text: 'A short fable: helpers, bugs, pellets, weather and a call for you. About 45 seconds.' }
     }
+    if (word === 'hat' || word === 'face') {
+      const list: readonly string[] = word === 'hat' ? HATS_TO_WEAR : FACES_TO_WEAR
+      if (name === 'none' || name === 'off') {
+        if (word === 'hat') wornHat = null
+        else wornFace = null
+        await $.store.set(word, null)
+        return { text: `Clawd takes off the ${word === 'hat' ? 'hat' : 'face gear'}.` }
+      }
+      if (!name || !list.includes(name)) return { text: `${word === 'hat' ? 'Hats' : 'Face'}: ${list.join(', ')}, none.` }
+      if (word === 'hat') wornHat = name as Hat
+      else wornFace = name as Face
+      await $.store.set(word, name)
+      return { text: `Clawd puts on the ${name}.` }
+    }
     // Unlisted: preview a holiday look (this load only). "auto" goes back to the calendar.
-    const [word, name] = arg.split(/\s+/)
     if (word === 'holiday') {
       if (name === 'auto') holidayPick = null
       else if (name === 'off') holidayPick = 'none'
@@ -520,7 +543,7 @@ export const register: Register = on => {
     }
     const mode = (await read($, calm)) ? 'calm' : 'lively'
     const sparkle = (await read($, shiny)) ? ' ✨ Shiny Clawd this session.' : ''
-    return { text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}). Use /tales on|off|calm|lively|demo.${sparkle}` }
+    return { text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}). Use /tales on|off|calm|lively|demo, /tales hat <name>, /tales face <name>.${sparkle}` }
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -664,7 +687,10 @@ export const register: Register = on => {
     const hour = day.getHours()
     const streak = await read($, combo)
     const hat: Hat | null =
-      streak >= CROWN_AT ? 'crown' : holiday === 'halloween' ? 'witch' : holiday === 'christmas' ? 'santa' : holiday === 'newyear' ? 'party' : isLate(hour) ? 'nightcap' : null
+      streak >= CROWN_AT
+        ? 'crown'
+        : wornHat ??
+          (holiday === 'halloween' ? 'witch' : holiday === 'christmas' ? 'santa' : holiday === 'newyear' ? 'party' : isLate(hour) ? 'nightcap' : null)
     const extras = {
       weather: weatherOf(await read($, context)),
       bugs: await read($, bugs),
@@ -677,6 +703,7 @@ export const register: Register = on => {
       shiny: (await read($, shiny)) === true,
       late: isLate(hour),
       fx: await read($, fx),
+      face: wornFace,
     }
     const all = lines(stage(shown, crew, f, cols, extras))
     // Standing Claude reaches the second line; only the alert crop cuts into him.

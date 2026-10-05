@@ -4,7 +4,7 @@
  * Hero walk and cheer frames from Claude Fables (henrik-thevibe/Claude-Fables), MIT;
  * the other poses, the scenery, the weather and the critters are ours.
  */
-import type { Action, Emote, Fx, Hat, Hero, Holiday, Worker } from '../types'
+import type { Action, Emote, Face, Fx, Hat, Hero, Holiday, Worker } from '../types'
 
 const PALETTE: Record<string, string> = {
   o: '#d97757', // Claude orange
@@ -87,6 +87,14 @@ const LOOK: Sprite[] = [
   [HEAD, '.koookoo.', 'okoookooo', HEAD],
   [HEAD, '.ookoook.', 'oookoooko', HEAD],
 ]
+/** One eye shut to a dash. */
+const WINK: Sprite = [HEAD, '.okooooo.', 'ookookkoo', HEAD]
+
+/** Sitting with a rod out front; the line and water are drawn by the stage. */
+const FISH: Sprite = ['.ooooooo...m', '.okoooko..m.', 'ookoookoos..', HEAD]
+/** Rod bent up, eyes squeezed shut: something bit. */
+const REEL: Sprite = ['.ooooooo.mm.', '.kkoookk.m..', 'ooooooooos..', HEAD]
+
 /** Paws over the eyes, knees knocking: rm -rf. */
 const COVER: Sprite[] = [
   [HEAD, ARMS, HEAD, HEAD, LEGS_A],
@@ -176,6 +184,12 @@ export function sprite(action: Action, frame: number): Sprite {
       return LOOK[Math.floor(frame / 5) % 2] ?? SIT
     case 'cover':
       return COVER[two] ?? STAND
+    case 'wink':
+      return WINK
+    case 'fish':
+      return FISH
+    case 'reel':
+      return REEL
     case 'run':
       return two ? STRIDE : STAND
     default:
@@ -264,6 +278,7 @@ export type Extras = {
   shiny?: boolean
   late?: boolean
   fx?: readonly Fx[]
+  face?: Face | null
 }
 
 const NONE: Extras = { weather: 'clear', bugs: 0, todos: null }
@@ -302,6 +317,21 @@ const HATS: Record<Hat, Sprite> = {
   party: ['....z....', '...qbq...', '..bqbqb..'],
   nightcap: ['......bw.', '..bbbbb..', '.WWWWWWW.'],
   crown: ['.z.z.z.z.', '.zzzzzzz.'],
+  tophat: ['..eeeee..', '..eeeee..', '..WWWWW..', '.eeeeeee.'],
+  gradcap: ['eeeeeeeee', '..eeeeez.', '..eeeee.z'],
+  captain: ['..WWWWW..', '.WWWzWWW.', 'eeeeeeeee'],
+}
+
+/** Face accessories, drawn from the eye row down. */
+const FACES: Record<Face, Sprite> = {
+  glasses: ['.kkk.kkk.', 'kkWkkkWkk'],
+  shades: ['kkkkkkkkk', '.kkW.kkW.'],
+  mustache: ['.........', '.........', '.kkk.kkk.'],
+}
+/** Which sprite row the eyes are on, per pose; poses without a usable face are left out. */
+const EYE_ROW: Partial<Record<Action, number>> = {
+  walk: 1, run: 1, read: 1, dig: 1, sneak: 1, sit: 1, wave: 1, scratch: 1, look: 1, wink: 1, fish: 1,
+  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3,
 }
 const BODY_W = 9
 
@@ -490,6 +520,37 @@ function emote(grid: string[][], kind: Emote, x: number, dir: 1 | -1, top: numbe
   }
 }
 
+const FISHY: Sprite[] = [
+  ['.c.', 'ccc', '.c.'],
+  ['c..', 'ccc', '..c'],
+]
+
+/** The line from the rod tip to a puddle in front of Claude, a bobber, and on a bite a fish on the hook. */
+function fishingLine(grid: string[][], action: Action, x: number, dir: 1 | -1, top: number, frame: number, cols: number) {
+  // Sprite column c lands at x + c facing right, x + (HERO_W - 1 - c) mirrored.
+  const at = (c: number) => (dir > 0 ? x + c : x + HERO_W - 1 - c)
+  const pond = [13, 14, 15, 16, 17].map(at)
+  for (const c of pond) {
+    const row = grid[GROUND]
+    if (row && c >= 0 && c < cols) row[c] = 'j'
+  }
+  const lineCol = at(15)
+  if (action === 'fish') {
+    paint(grid, ['m'], at(12), top - 1)
+    paint(grid, ['m'], at(13), top - 1)
+    paint(grid, ['m'], at(14), top)
+    for (let y = top + 1; y < GROUND - 1; y++) paint(grid, ['m'], lineCol, y)
+    paint(grid, ['r'], lineCol, GROUND - 1 - (Math.floor(frame / 4) % 2))
+    return
+  }
+  // A bite: the line goes taut and a fish wriggles up out of the water.
+  paint(grid, ['m'], at(11), top - 1)
+  paint(grid, ['m'], at(12), top - 1)
+  paint(grid, ['m'], at(12), top)
+  const fish = FISHY[Math.floor(frame / 2) % 2] ?? []
+  paint(grid, dir > 0 ? fish : fish.map(r => r.split('').reverse().join('')), at(12) - 1, Math.min(top + 1, GROUND - 3))
+}
+
 const WALKING = new Set<Action>(['walk', 'run', 'sneak', 'carry'])
 
 /** Running helpers line up behind each other: four or more make a conga. */
@@ -558,6 +619,12 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
     const hat = HATS[extras.hat]
     paint(grid, face > 0 ? hat : hat.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - BODY_W, top - hat.length)
   }
+  const wear = extras.face ? FACES[extras.face] : null
+  const eyes = EYE_ROW[hero.action]
+  if (wear && eyes !== undefined) {
+    paint(grid, face > 0 ? wear : wear.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - BODY_W, top + eyes)
+  }
+  if (hero.action === 'fish' || hero.action === 'reel') fishingLine(grid, hero.action, x, face, top, frame, cols)
   if (wet === 'rain' || wet === 'storm') paint(grid, UMBRELLA, x, Math.max(0, top - 3))
   if (hero.action === 'sleep') {
     if (Math.floor(frame / 15) % 2 === 1) {
@@ -633,6 +700,9 @@ const GLYPHS: Record<Action, readonly string[]> = {
   scratch: ['#'],
   look: ['◂', '▸'],
   cover: ['◡', '◠'],
+  wink: [';'],
+  fish: ['⌐', '¬'],
+  reel: ['><>'],
 }
 
 export function glyph(action: Action, frame: number): string {

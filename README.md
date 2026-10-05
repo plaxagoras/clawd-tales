@@ -36,7 +36,7 @@ Every tool call gets a pose and a one-line caption. Claude reads a book for `Rea
 - Thank Claude in your prompt and Clawd blushes. Start with "no" or "wrong" and it rubs its head.
 - `git commit` wraps a parcel and pops confetti. `git push` sends a paper plane off the stage. `rm -rf` makes Clawd cover its eyes. Package installs drop boxes from the sky.
 - A command that isn't found sends the `sl` train across the stage.
-- While it waits for you, Clawd waves, scratches its head, looks around and watches a butterfly. Asleep, it dreams about the last thing it did.
+- While it waits for you, Clawd waves, winks, scratches its head, looks around and watches a butterfly. A longer wait and it goes fishing. Asleep, it dreams about the last thing it did.
 - The sky follows your clock: sun by day, stars at night. Between 1 and 5 am, Clawd wears a nightcap and keeps a mug of coffee nearby.
 - Halloween, Christmas, New Year's, Valentine's Day and April 1st each get a costume or something extra.
 - Now and then a whale, a UFO or the train passes through. One session in a hundred brings a shiny Clawd.
@@ -72,6 +72,8 @@ claude --plugin-dir ./clawd-tales
 | `/tales lively` | Back to 5 frames a second (the default) |
 | `/tales off` / `/tales on` | Hide or show the band |
 | `/tales` | Shows the current state |
+| `/tales hat <name>` | Puts on a top hat, grad cap or captain's hat (`none` takes it off). Saved between sessions |
+| `/tales face <name>` | Glasses, shades or a mustache (`none` takes them off). Saved between sessions |
 | `/tales holiday <name>` | Previews a holiday look until the next restart (`auto` goes back to the calendar) |
 
 Your on/off and calm settings are saved between sessions.

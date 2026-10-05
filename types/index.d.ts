@@ -16,6 +16,9 @@ export type Action =
   | 'scratch'
   | 'look'
   | 'cover'
+  | 'wink'
+  | 'fish'
+  | 'reel'
 
 /** A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly. */
 export type Emote = 'think' | 'blush' | 'sweat' | 'butterfly'
@@ -25,7 +28,9 @@ export type FxKind = 'confetti' | 'plane' | 'boxes' | 'train' | 'whale' | 'ufo'
 export type Fx = { id: number; kind: FxKind; start: number; dur: number; x: number }
 
 export type Holiday = 'halloween' | 'christmas' | 'newyear' | 'valentine' | 'aprilfools'
-export type Hat = 'witch' | 'santa' | 'party' | 'nightcap' | 'crown'
+export type Hat = 'witch' | 'santa' | 'party' | 'nightcap' | 'crown' | 'tophat' | 'gradcap' | 'captain'
+/** Worn over the face: /tales face. */
+export type Face = 'glasses' | 'shades' | 'mustache'
 
 export type Hero = {
   /** idle draws nothing; resting is the sit, yawn, sleep ladder after a turn. */

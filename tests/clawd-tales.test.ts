@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { HERO_W, STAGE_ROWS, glyph, lines, mirror, sprite, stage, tierOf, weatherOf } from '../hooks/art'
-import { bashEggs, beat, commitMessage, ending, fidgetAt, holidayOf, moodOf, notFound, restCaption, skyOf, testCounts } from '../hooks/story'
+import { bashEggs, beat, commitMessage, ending, fidgetAt, fishing, holidayOf, moodOf, notFound, restCaption, skyOf, testCounts } from '../hooks/story'
 
 function world(on: On) {
   const clock = mock.clock(on)
@@ -17,7 +17,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -79,6 +79,25 @@ test('rest time fidgets, then dreams of the last pose', () => {
   expect(restCaption('sleep', 'read')).toMatch(/dreaming of books/)
   const asleep = stage({ ...HERO, action: 'sleep', last: 'read' }, [], 15, 60)
   expect(asleep.join('').includes('B')).toBe(true) // the book in the dream bubble
+})
+
+test('a long wait goes fishing, with a bite now and then', () => {
+  expect(fishing(5000)).toBe(null)
+  expect(fishing(16000)?.action).toBe('fish')
+  expect(fishing(28000)?.action).toBe('reel')
+  expect(fishing(50000)).toBe(null)
+  const rows = stage({ ...HERO, action: 'fish' }, [], 0, 60)
+  expect(rows.join('').includes('r')).toBe(true) // bobber
+  expect((rows[STAGE_ROWS - 1] ?? '').includes('j')).toBe(true) // the puddle
+  const bite = stage({ ...HERO, action: 'reel' }, [], 0, 60)
+  expect(bite.join('').includes('c')).toBe(true) // the fish
+})
+
+test('hats and face gear draw', () => {
+  const rows = stage({ ...HERO }, [], 0, 60, { weather: 'clear', bugs: 0, todos: null, hat: 'tophat', face: 'shades' })
+  const top = rows.join('')
+  expect(top.includes('e')).toBe(true)
+  expect(top.includes('W')).toBe(true)
 })
 
 test('effects, emotes and a patted helper draw', () => {
@@ -184,7 +203,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await clock.advance(10000) // 39.5 s: resting
     expect(await see(/sits by the path/)).toBeDefined()
 
-    await clock.advance(50000) // 89.5 s
+    await clock.advance(15500) // 55 s: a long wait, so Claude fishes
+    expect(await see(/casts a line/)).toBeDefined()
+
+    await clock.advance(39500) // 94.5 s
     expect(await see(/dozes/)).toBeDefined()
 
     await clock.advance(200000)
@@ -284,5 +306,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await band.unmount()
     const status = (await run('')) as { text?: string }
     expect(status.text).toMatch(/\(calm\)/)
+    expect(((await run('hat tophat')) as { text?: string }).text).toMatch(/puts on the tophat/)
+    expect(((await run('face monocle')) as { text?: string }).text).toMatch(/glasses, shades, mustache/)
+    expect(((await run('hat none')) as { text?: string }).text).toMatch(/takes off/)
   })
 }

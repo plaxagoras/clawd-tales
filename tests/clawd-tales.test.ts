@@ -440,6 +440,23 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/Squeaky clean/)).toBeDefined() // a precompute changes nothing
   })
 
+  test(`work before the first launch doesn't skip the egg (${surface})`, async ($, on) => {
+    const clock = world(on)
+    on('prompt.submit', (_, e) => e as never)
+    on('tool.call', () => ({ result: { stdout: 'ok', stderr: '' }, text: 'ok' }) as never)
+    on('turn.complete', () => ({ text: '' }) as never)
+    on('classic.SessionStart', () => ({}) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.tool.call({ tool: 'Read', file_path: '/f', tool_use_id: 'r1' } as never)
+    await $.turn.complete({ answer: '', durationMs: 5000, isAborted: false, turnId: 't', reason: 'answer' } as never)
+    await clock.advance(200000)
+    await $.classic.SessionStart({ source: 'startup', hook_event_name: 'SessionStart' } as never)
+    const band = await $.ui.mount({ ...BAND, surface })
+    expect(await band.find({ type: 'Text', text: /egg wobbles/ })).toBeDefined()
+    await band.unmount()
+  })
+
   test(`turn length picks the ending, a helper's turn doesn't end Claude's, and tokens celebrate (${surface})`, async ($, on) => {
     world(on)
     on('prompt.submit', (_, e) => e as never)

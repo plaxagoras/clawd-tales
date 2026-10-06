@@ -700,7 +700,8 @@ export const register: Register = on => {
     if (owner) await workerBeat($, owner, b.action, false)
     else {
       await heroBeat($, b, 1, egg?.emote)
-      stats = countCall(stats ?? NEW_STATS, b.action)
+      // No counting before the hatch: a mid-session install would skip the egg forever.
+      if (stats) stats = countCall(stats, b.action)
     }
     if (eggs.includes('sl')) await addFx($, 'train', 0)
     if (asks) {

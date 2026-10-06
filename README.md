@@ -41,7 +41,7 @@ You ask Claude to fix a failing test. Clawd runs off to `pytest` and three bugs 
 | Two errors in a row | Clawd goes cross-eyed with stars circling. A third flips the table |
 | You approve a permission prompt quickly | Hearts. Leave one waiting past 30 seconds and Clawd starts to sweat, with a timer in the caption |
 | The conversation is compacted | Clawd sweeps the stage with a broom and the weather clears |
-| A session starts | Clawd drops in from the sky. A resumed session gets a wave hello. The very first session hatches Clawd from an egg |
+| A session starts | Clawd drops in from the sky. A resumed session gets a wave hello. The first new session after you install hatches Clawd from an egg, and progress starts counting from there |
 | 200 tool calls | The hatchling loses its eggshell cap and grows up into whatever work it did most: a scholar (reading), a detective (searching), a builder (editing), a hacker (commands), an explorer (the web) or a captain (helpers). Each wears its own hat, and the form can change as your habits do |
 
 ### Small things

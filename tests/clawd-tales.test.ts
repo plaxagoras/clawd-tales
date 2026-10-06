@@ -282,8 +282,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     expect(await see('engine band')).toBeDefined()
     await $.command.run({ command: 'tales', args: 'demo', origin: { kind: 'composer' }, presentation: 'command' } as never)
+    await clock.advance(200)
+    expect(await see(/egg wobbles/)).toBeDefined()
+    await clock.advance(1000)
+    expect(await see(/hatches/)).toBeDefined()
 
-    await clock.advance(5000)
+    await clock.advance(3800)
     expect(await see(/Claude .*register\.tsx/)).toBeDefined()
     expect(await see('engine band')).toBeDefined()
     expect(await see(/0\/5 tasks/)).toBeDefined()
@@ -313,7 +317,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/seals the parcel/)).toBeDefined()
 
     await clock.advance(3500) // 29.5 s
-    expect(await see(/The end.*crown ×12/)).toBeDefined()
+    expect(await see(/grows up into an explorer/)).toBeDefined()
 
     await clock.advance(10000) // 39.5 s: resting
     expect(await see(/sits by the path/)).toBeDefined()

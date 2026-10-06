@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Action, Emote, Face, Fx, FxKind, Hat, Hero, Holiday, Limit, Stats, Worker } from '../types'
+import type { Action, Emote, Face, Form, Fx, FxKind, Hat, Hero, Holiday, Limit, Stats, Worker } from '../types'
 import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lines, speed, stage, tierOf, weatherOf } from './art'
 import type { Egg } from './story'
 import {
@@ -105,6 +105,7 @@ let stats: Stats | null = null // lifetime progress from $.store; null until Cla
 let scarfOn = true // /tales scarf, saved in $.store
 let scarfKey: string | null = null // the project's scarf color
 const HATCH_MS = 2400
+let demoGrowth: Form | 'shell' | null = null // /tales demo's own hatch and growth; real stats untouched
 const FACES_TO_WEAR: readonly Face[] = ['glasses', 'shades', 'mustache']
 const workerBeatAt = new Map<string, number>()
 const workerTripUntil = new Map<string, number>()
@@ -500,6 +501,13 @@ function runDemo($: EngineInterface) {
     [9000, 'Edit', { file_path: '/src/hooks/register.tsx' }],
     [15000, 'WebSearch', { query: 'half block pixel art' }],
   ]
+  // It opens on an egg and ends with the hatchling growing up.
+  demoGrowth = 'shell'
+  at(0, async () => {
+    const now = await $.clock.now()
+    await update($, hero, (h): Hero => ({ ...h, action: 'hatch', caption: 'An egg wobbles…', since: now }))
+  })
+  at(1100, () => heroBeat($, { action: 'cheer', caption: 'A Clawd hatches! Hello!' }, 0))
   for (const [ms, tool, args] of steps) at(ms, () => heroBeat($, beat(tool, args, `demo${ms}`)))
   at(2000, () => onTodos($, { todos: [1, 2, 3, 4, 5].map(n => ({ content: `Task ${n}`, status: n === 1 ? 'in_progress' : 'pending' })) }))
   at(3000, () => update($, context, () => 74)) // rain
@@ -530,8 +538,13 @@ function runDemo($: EngineInterface) {
     await heroBeat($, { action: 'cheer', caption: eggDone('commit', 'git commit -m "Teach Clawd new tricks"') ?? '' }, 0)
     await addFx($, 'confetti', (await read($, hero)).x)
   })
-  at(28000, () => close($, ending(9, 28, false, 12)))
-  at(40000, () => update($, context, () => 30))
+  at(27000, () => update($, context, () => 30)) // the storm passes before the big moment
+  at(28000, async () => {
+    demoGrowth = 'explorer'
+    await close($, growCaption('explorer', null))
+    await addFx($, 'confetti', (await read($, hero)).x)
+  })
+  at(46000, () => (demoGrowth = null))
   at(40000, () => update($, todos, () => null)) // the fable's quest list leaves with it
 }
 
@@ -898,6 +911,7 @@ export const register: Register = on => {
           holidayHat ??
           (longHaul ? 'hardhat' : null) ??
           (isLate(hour) ? 'nightcap' : null) ??
+          (demoGrowth === 'shell' ? 'shell' : demoGrowth ? FORM_HAT[demoGrowth] : null) ??
           (stats?.form ? FORM_HAT[stats.form] : stats ? 'shell' : null))
     const extras = {
       weather: weatherOf(await read($, context)),

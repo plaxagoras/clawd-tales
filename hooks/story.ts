@@ -136,7 +136,7 @@ export function warpColor(server: string): string {
 }
 
 /** A scarf color per project, from its root folder; the helpers' tier colors are left out. */
-const SCARF_COLORS = ['r', 'b', 'G', 'A', 'c', 'Y', 'q', 'O']
+const SCARF_COLORS = ['r', 'b', 'W', 'A', 'c', 'Y', 'q', 'O'] // no green: it vanishes against the trees
 export function scarfColor(root: string): string {
   return SCARF_COLORS[hashOf(root) % SCARF_COLORS.length] ?? 'r'
 }

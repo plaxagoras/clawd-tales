@@ -41,7 +41,8 @@ You ask Claude to fix a failing test. Clawd runs off to `pytest` and three bugs 
 | Two errors in a row | Clawd goes cross-eyed with stars circling. A third flips the table |
 | You approve a permission prompt quickly | Hearts. Leave one waiting past 30 seconds and Clawd starts to sweat, with a timer in the caption |
 | The conversation is compacted | Clawd sweeps the stage with a broom and the weather clears |
-| A session starts | Clawd drops in from the sky. A resumed session gets a wave hello |
+| A session starts | Clawd drops in from the sky. A resumed session gets a wave hello. The very first session hatches Clawd from an egg |
+| 200 tool calls | The hatchling loses its eggshell cap and grows up into whatever work it did most: a scholar (reading), a detective (searching), a builder (editing), a hacker (commands), an explorer (the web) or a captain (helpers). Each wears its own hat, and the form can change as your habits do |
 
 ### Small things
 
@@ -86,8 +87,9 @@ claude --plugin-dir ./clawd-tales
 | `/tales lively` | Back to 5 frames a second (the default) |
 | `/tales off` / `/tales on` | Hide or show the band |
 | `/tales` | Shows the current state |
-| `/tales hat <name>` | Puts on a top hat, grad cap, captain's hat, wizard hat or hard hat (`none` takes it off). Saved between sessions |
+| `/tales hat <name>` | Puts on a top hat, grad cap, captain's hat, wizard hat, hard hat, deerstalker, beanie, pith helmet or eggshell (`none` takes it off). Saved between sessions |
 | `/tales face <name>` | Glasses, shades or a mustache (`none` takes them off). Saved between sessions |
+| `/tales scarf on` / `off` | Each project gets its own scarf color, picked from the project folder, so you can tell repos apart. On by default |
 | `/tales holiday <name>` | Previews a holiday look until the next restart (`auto` goes back to the calendar) |
 
 Your on/off and calm settings are saved between sessions.
@@ -96,7 +98,7 @@ Your on/off and calm settings are saved between sessions.
 
 It is a Claude Code mod: a plugin of function hooks in `hooks/register.tsx`. It listens to `tool.call`, `agent.spawn`, `classic.PermissionRequest`, `classic.UserPromptSubmit` (for plan mode), `session.measure` and the turn events, and draws with `ui.render` on the `AbovePrompt` band. Each terminal cell is two pixels (`▀` with a foreground and a background color).
 
-- No network, no model calls. It only reads what the hooks hand it, and the only thing it saves is your settings (on/off, calm, hat, face) in Claude Code's plugin store.
+- No network, no model calls. It only reads what the hooks hand it, and the only things it saves are your settings (on/off, calm, hat, face, scarf) and Clawd's tool-call tally in Claude Code's plugin store.
 - Test results come from the `Bash` output of commands that look like test runs (`npm test`, `pytest`, `cargo test`, `go test` and similar).
 - Subagent end is detected by polling `$.agent.list()`.
 

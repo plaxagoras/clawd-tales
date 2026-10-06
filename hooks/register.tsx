@@ -1,29 +1,37 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Action, Emote, Face, Fx, FxKind, Hat, Hero, Holiday, Limit, Worker } from '../types'
+import type { Action, Emote, Face, Fx, FxKind, Hat, Hero, Holiday, Limit, Stats, Worker } from '../types'
 import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lines, speed, stage, tierOf, weatherOf } from './art'
 import type { Egg } from './story'
 import {
   COMBO_AT,
   CROWN_AT,
+  FORM_HAT,
+  GROW_AT,
+  NEW_STATS,
   REST,
   THINKING,
   bashEggs,
   beat,
   clockTime,
+  countCall,
   eggBeat,
   eggDone,
   ending,
   endingAction,
   fidgetAt,
   fishing,
+  formOf,
+  growCaption,
   holidayOf,
   isLate,
   isMidnightNewYear,
   moodOf,
   notFound,
+  readStats,
   restCaption,
+  scarfColor,
   skyOf,
   startCaption,
   testCounts,
@@ -92,7 +100,11 @@ const NERVOUS_MS = 30_000 // a call for the user waiting this long: a sweat drop
 const FLIP_MS = 4000
 let wornHat: Hat | null = null // /tales hat, saved in $.store
 let wornFace: Face | null = null // /tales face, saved in $.store
-const HATS_TO_WEAR: readonly Hat[] = ['tophat', 'gradcap', 'captain', 'wizard', 'hardhat', 'witch', 'santa', 'party', 'nightcap', 'crown']
+const HATS_TO_WEAR: readonly Hat[] = ['tophat', 'gradcap', 'captain', 'wizard', 'hardhat', 'deerstalker', 'beanie', 'pith', 'shell', 'witch', 'santa', 'party', 'nightcap', 'crown']
+let stats: Stats | null = null // lifetime progress from $.store; null until Clawd has hatched
+let scarfOn = true // /tales scarf, saved in $.store
+let scarfKey: string | null = null // the project's scarf color
+const HATCH_MS = 2400
 const FACES_TO_WEAR: readonly Face[] = ['glasses', 'shades', 'mustache']
 const workerBeatAt = new Map<string, number>()
 const workerTripUntil = new Map<string, number>()
@@ -525,13 +537,20 @@ function runDemo($: EngineInterface) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, demo, hat, face' })
+    await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, demo, hat, face, scarf' })
     sessionTokens = 0
     tokensSeen = 0
     const hatSaved = await $.store.get('hat')
     wornHat = HATS_TO_WEAR.includes(hatSaved as Hat) ? (hatSaved as Hat) : null
     const faceSaved = await $.store.get('face')
     wornFace = FACES_TO_WEAR.includes(faceSaved as Face) ? (faceSaved as Face) : null
+    stats = readStats(await $.store.get('stats'))
+    scarfOn = (await $.store.get('scarf')) !== false
+    try {
+      scarfKey = scarfColor(await $.session.root())
+    } catch {
+      scarfKey = null
+    }
     const saved = await $.store.get('isOn')
     if (typeof saved === 'boolean') await update($, isOn, () => saved)
     const savedCalm = await $.store.get('calm')
@@ -566,6 +585,12 @@ export const register: Register = on => {
       return { text: arg === 'calm' ? 'Calm: one beat a second, Claude stays put between tool calls.' : 'Lively: 5 fps, wandering on.' }
     }
     const [word, name] = arg.split(/\s+/)
+    if (word === 'scarf') {
+      if (name !== 'on' && name !== 'off') return { text: `The scarf is ${scarfOn ? 'on' : 'off'}. Use /tales scarf on|off.` }
+      scarfOn = name === 'on'
+      await $.store.set('scarf', scarfOn)
+      return { text: scarfOn ? 'Clawd wraps on the project scarf.' : 'Clawd takes off the scarf.' }
+    }
     if (arg === 'demo') {
       await begin($)
       runDemo($)
@@ -595,7 +620,14 @@ export const register: Register = on => {
     }
     const mode = (await read($, calm)) ? 'calm' : 'lively'
     const sparkle = (await read($, shiny)) ? ' ✨ Shiny Clawd this session.' : ''
-    return { text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}). Use /tales on|off|calm|lively|demo, /tales hat <name>, /tales face <name>.${sparkle}` }
+    const growth = !stats
+      ? ' Clawd has not hatched yet.'
+      : stats.form
+        ? ` Clawd is a ${stats.form} (${stats.xp} tool calls).`
+        : ` Clawd is a hatchling: ${stats.xp}/${GROW_AT} tool calls to grow up.`
+    return {
+      text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}).${growth}${sparkle} Use /tales on|off|calm|lively|demo, /tales hat <name>, /tales face <name>, /tales scarf on|off.`,
+    }
   })
 
   // Plan mode only shows on the classic hook's input; a mid-turn shift+tab waits for the next prompt.
@@ -653,7 +685,10 @@ export const register: Register = on => {
     // A main-loop call means Claude is working, whatever the band missed.
     if (!owner && (await read($, hero)).mode !== 'working') await begin($)
     if (owner) await workerBeat($, owner, b.action, false)
-    else await heroBeat($, b, 1, egg?.emote)
+    else {
+      await heroBeat($, b, 1, egg?.emote)
+      stats = countCall(stats ?? NEW_STATS, b.action)
+    }
     if (eggs.includes('sl')) await addFx($, 'train', 0)
     if (asks) {
       alertAt = await $.clock.now()
@@ -742,6 +777,20 @@ export const register: Register = on => {
   // A session opens: a fresh one gets Clawd dropping in, a resumed one a wave hello.
   on('classic.SessionStart', async ($, e, next) => {
     const result = await next(e)
+    // The very first session: an egg instead of the drop-in.
+    const unhatched = e.source === 'startup' && !readStats(await $.store.get('stats'))
+    if (unhatched && (await read($, hero)).mode === 'idle') {
+      stats = stats ?? { ...NEW_STATS }
+      await $.store.set('stats', stats)
+      const now = await $.clock.now()
+      await update($, hero, (h): Hero => ({ ...h, action: 'hatch', caption: 'An egg wobbles…', mode: 'ending', since: now, emote: null }))
+      $.clock.after(HATCH_MS, async () => {
+        const at = await $.clock.now()
+        await update($, hero, (h): Hero => (h.action === 'hatch' ? { ...h, action: 'cheer', caption: 'A Clawd hatches! Hello!', since: at } : h))
+      })
+      ensureTimer($)
+      return result
+    }
     const entrance: Pick<Hero, 'action' | 'caption'> | null =
       e.source === 'startup'
         ? { action: 'drop', caption: 'Clawd drops in. Hello!' }
@@ -768,8 +817,17 @@ export const register: Register = on => {
       const seconds = Math.round((e.durationMs ?? (await $.clock.now()) - startedAt) / 1000)
       const crossed = tokenMilestone(tokensSeen, sessionTokens)
       tokensSeen = sessionTokens
-      await close($, ending(cur.steps, seconds, e.isAborted, best, crossed), endingAction(seconds, e.isAborted))
-      if (crossed) await addFx($, 'confetti', cur.x)
+      const grown = stats ? formOf(stats) : null
+      if (stats && grown && grown !== stats.form) {
+        const was = stats.form
+        stats = { ...stats, form: grown }
+        await close($, growCaption(grown, was), 'cheer')
+        await addFx($, 'confetti', cur.x)
+      } else {
+        await close($, ending(cur.steps, seconds, e.isAborted, best, crossed), endingAction(seconds, e.isAborted))
+        if (crossed) await addFx($, 'confetti', cur.x)
+      }
+      if (stats) await $.store.set('stats', stats)
     }
     return next(e)
   })
@@ -835,7 +893,12 @@ export const register: Register = on => {
     const hat: Hat | null =
       streak >= CROWN_AT
         ? 'crown'
-        : (wornHat ?? (planMode ? 'wizard' : null) ?? holidayHat ?? (longHaul ? 'hardhat' : null) ?? (isLate(hour) ? 'nightcap' : null))
+        : (wornHat ??
+          (planMode ? 'wizard' : null) ??
+          holidayHat ??
+          (longHaul ? 'hardhat' : null) ??
+          (isLate(hour) ? 'nightcap' : null) ??
+          (stats?.form ? FORM_HAT[stats.form] : stats ? 'shell' : null))
     const extras = {
       weather: weatherOf(await read($, context)),
       bugs: await read($, bugs),
@@ -851,6 +914,7 @@ export const register: Register = on => {
       // Earned the crown this turn: shades on, the cool kind.
       face: wornFace ?? (best >= CROWN_AT ? 'shades' : null),
       tie: running.length >= TIE_AT,
+      scarf: scarfOn ? scarfKey : null,
     }
     const all = lines(stage(shown, crew, f, cols, extras))
     // Standing Claude reaches the second line; only the alert crop cuts into him.

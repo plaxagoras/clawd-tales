@@ -2,7 +2,7 @@
  * Turns a tool call into an action and a one-line caption, from templates.
  * No model calls: Claude Fables asks Sonnet every few seconds; this reads the call itself.
  */
-import type { Action, Emote, Holiday } from '../types'
+import type { Action, Emote, Form, Hat, Holiday, Stats } from '../types'
 
 export type Beat = { action: Action; caption: string }
 
@@ -123,12 +123,82 @@ export function waitBeat(out: number, label?: string): Beat {
   return { action: 'juggle', caption: `Claude juggles while ${out} helpers work…` }
 }
 
+function hashOf(text: string): number {
+  let h = 0
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
 /** A stable palette key per MCP server, for its warp. */
 const WARP_COLORS = ['p', 't', 'h', 'f', 'c', 'q', 'O', 'b', 'z']
 export function warpColor(server: string): string {
-  let h = 0
-  for (let i = 0; i < server.length; i++) h = (h * 31 + server.charCodeAt(i)) | 0
-  return WARP_COLORS[Math.abs(h) % WARP_COLORS.length] ?? 'p'
+  return WARP_COLORS[hashOf(server) % WARP_COLORS.length] ?? 'p'
+}
+
+/** A scarf color per project, from its root folder; the helpers' tier colors are left out. */
+const SCARF_COLORS = ['r', 'b', 'G', 'A', 'c', 'Y', 'q', 'O']
+export function scarfColor(root: string): string {
+  return SCARF_COLORS[hashOf(root) % SCARF_COLORS.length] ?? 'r'
+}
+
+/** Tool calls before the hatchling grows up. */
+export const GROW_AT = 200
+const FORM_OF: Partial<Record<Action, Form>> = {
+  read: 'scholar',
+  sneak: 'detective',
+  dig: 'builder',
+  run: 'hacker',
+  fly: 'explorer',
+  carry: 'captain',
+}
+export const FORM_HAT: Record<Form, Hat> = {
+  scholar: 'gradcap',
+  detective: 'deerstalker',
+  builder: 'hardhat',
+  hacker: 'beanie',
+  explorer: 'pith',
+  captain: 'captain',
+}
+const FORM_WORK: Record<Form, string> = {
+  scholar: 'reading',
+  detective: 'searching',
+  builder: 'editing',
+  hacker: 'running commands',
+  explorer: 'browsing the web',
+  captain: 'sending helpers',
+}
+export const NEW_STATS: Stats = { xp: 0, by: {}, form: null }
+
+/** One main-loop tool call, counted toward the form its pose belongs to. */
+export function countCall(stats: Stats, action: Action): Stats {
+  const form = FORM_OF[action]
+  return { ...stats, xp: stats.xp + 1, by: form ? { ...stats.by, [form]: (stats.by[form] ?? 0) + 1 } : stats.by }
+}
+
+/** The form Clawd has grown into: none before GROW_AT, then the most-done work. A rival has to lead by 10% to take over. */
+export function formOf(stats: Stats): Form | null {
+  if (stats.xp < GROW_AT) return null
+  let top: Form | null = null
+  for (const [form, n] of Object.entries(stats.by) as [Form, number][]) if (!top || n > (stats.by[top] ?? 0)) top = form
+  const cur = stats.form
+  if (cur && top && (stats.by[cur] ?? 0) * 1.1 >= (stats.by[top] ?? 0)) return cur
+  return top
+}
+
+export function growCaption(form: Form, was: Form | null): string {
+  const a = /^[aeiou]/.test(form) ? 'an' : 'a'
+  return was
+    ? `Clawd is ${a} ${form} now: mostly ${FORM_WORK[form]} lately.`
+    : `Clawd grows up into ${a} ${form}! Mostly ${FORM_WORK[form]}.`
+}
+
+/** Old store data back into shape; anything unreadable starts over. */
+export function readStats(raw: unknown): Stats | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Partial<Stats>
+  if (typeof r.xp !== 'number') return null
+  const by = r.by && typeof r.by === 'object' ? r.by : {}
+  return { xp: r.xp, by, form: typeof r.form === 'string' && r.form in FORM_HAT ? r.form : null }
 }
 
 /** Clean calls in a row that show a combo, and that earn the crown. */

@@ -19,6 +19,13 @@ import {
   tokenMilestone,
   waitBeat,
   warpColor,
+  scarfColor,
+  countCall,
+  formOf,
+  growCaption,
+  readStats,
+  GROW_AT,
+  NEW_STATS,
 } from '../hooks/story'
 
 function world(on: On) {
@@ -34,7 +41,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -122,6 +129,43 @@ test('eyes glance, and dizzy, flip, sweep and drop draw their extras', () => {
   const falling = stage({ ...HERO, action: 'drop', since: 0 }, [], 0, 40, { weather: 'clear', bugs: 0, todos: null, now: 100 })
   const landed = stage({ ...HERO, action: 'drop', since: 0 }, [], 0, 40, { weather: 'clear', bugs: 0, todos: null, now: 900 })
   expect(falling.findIndex(r => r.includes('o'))).toBeLessThan(landed.findIndex(r => r.includes('o')))
+})
+
+test('the project scarf draws under the eyes, and every project gets a steady color', () => {
+  const extras = { weather: 'clear', bugs: 0, todos: null } as const
+  expect(scarfColor('/home/a/repo')).toBe(scarfColor('/home/a/repo'))
+  const colors = new Set(['/a', '/b', '/c', '/d', '/e', '/f', '/g', '/h'].map(scarfColor))
+  expect(colors.size).toBeGreaterThan(2)
+  for (const c of colors) expect(['t', 'p', 'h', 'f', 'o'].includes(c)).toBe(false) // never a helper's tint or the body
+  const bare = stage({ ...HERO }, [], 0, 60, extras)
+  const wrapped = stage({ ...HERO }, [], 0, 60, { ...extras, scarf: 'c' })
+  expect(bare.join('').includes('c')).toBe(false)
+  const row = wrapped.findIndex(r => r.includes('ccccccc'))
+  expect(row).toBeGreaterThan(wrapped.findIndex(r => r.includes('k'))) // below the eyes
+  const left = stage({ ...HERO, dir: -1 }, [], 0, 60, { ...extras, scarf: 'c' })
+  expect(left.some(r => r.includes('ccccccc'))).toBe(true)
+  expect(stage({ ...HERO, action: 'hatch' }, [], 0, 60, { ...extras, scarf: 'c' }).join('').includes('c')).toBe(false) // no scarf on an egg
+})
+
+test('Clawd grows into the work it does most, and holds its form against a near tie', () => {
+  let s = { ...NEW_STATS }
+  for (let n = 0; n < GROW_AT - 1; n++) s = countCall(s, 'read')
+  expect(formOf(s)).toBe(null)
+  s = countCall(s, 'run')
+  expect(s.xp).toBe(GROW_AT)
+  expect(formOf(s)).toBe('scholar')
+  s = { ...s, form: 'scholar' }
+  for (let n = 0; n < GROW_AT; n++) s = countCall(s, 'run') // 201 runs to 199 reads: not 10% ahead
+  expect(formOf(s)).toBe('scholar')
+  for (let n = 0; n < 30; n++) s = countCall(s, 'run')
+  expect(formOf(s)).toBe('hacker')
+  expect(countCall(s, 'cheer').by).toEqual(s.by) // poses with no work type count toward xp only
+  expect(growCaption('explorer', null)).toMatch(/grows up into an explorer/)
+  expect(growCaption('hacker', 'scholar')).toMatch(/a hacker now/)
+  expect(readStats(undefined)).toBe(null)
+  expect(readStats({ xp: 'x' })).toBe(null)
+  expect(readStats({ xp: 3, by: { read: 1 }, form: 'wizard' })?.form).toBe(null)
+  expect(sprite('hatch', 0).length).toBe(5)
 })
 
 test('hats and face gear draw', () => {
@@ -366,7 +410,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await see(/quick yes/)).toBeDefined()
   })
 
-  test(`a fresh session drops Clawd in, and compaction sweeps (${surface})`, async ($, on) => {
+  test(`the first session hatches an egg, later ones drop Clawd in, and compaction sweeps (${surface})`, async ($, on) => {
     const clock = world(on)
     on('classic.SessionStart', () => ({}) as never)
     on('session.compact', (_, e) => ({ messages: e.messages }) as never)
@@ -378,8 +422,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
       return found
     }
     await $.classic.SessionStart({ source: 'startup', hook_event_name: 'SessionStart' } as never)
-    expect(await see(/drops in/)).toBeDefined()
+    expect(await see(/egg wobbles/)).toBeDefined()
+    await clock.advance(2600)
+    expect(await see(/hatches/)).toBeDefined()
     await clock.advance(200000) // rests, then hides
+    await $.classic.SessionStart({ source: 'startup', hook_event_name: 'SessionStart' } as never)
+    expect(await see(/drops in/)).toBeDefined()
+    await clock.advance(200000)
     expect(await see(/drops in|sits/)).toBe(undefined)
     await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'hi', toolUses: [] }] } as never)
     expect(await see(/Squeaky clean/)).toBeDefined()

@@ -29,6 +29,7 @@ export type Action =
   | 'listen'
   | 'juggle'
   | 'stretch'
+  | 'hatch'
 
 /**
  * A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly;
@@ -42,7 +43,25 @@ export type FxKind = 'confetti' | 'plane' | 'boxes' | 'train' | 'whale' | 'ufo' 
 export type Fx = { id: number; kind: FxKind; start: number; dur: number; x: number; color?: string }
 
 export type Holiday = 'halloween' | 'christmas' | 'newyear' | 'valentine' | 'aprilfools'
-export type Hat = 'witch' | 'santa' | 'party' | 'nightcap' | 'crown' | 'tophat' | 'gradcap' | 'captain' | 'wizard' | 'hardhat'
+export type Hat =
+  | 'witch'
+  | 'santa'
+  | 'party'
+  | 'nightcap'
+  | 'crown'
+  | 'tophat'
+  | 'gradcap'
+  | 'captain'
+  | 'wizard'
+  | 'hardhat'
+  | 'shell'
+  | 'deerstalker'
+  | 'beanie'
+  | 'pith'
+/** What Clawd grows into after GROW_AT tool calls, from the work it does most. */
+export type Form = 'scholar' | 'detective' | 'builder' | 'hacker' | 'explorer' | 'captain'
+/** Lifetime progress, saved in $.store: tool calls in all, per form, and the form it grew into. */
+export type Stats = { xp: number; by: Partial<Record<Form, number>>; form: Form | null }
 /** Worn over the face: /tales face. */
 export type Face = 'glasses' | 'shades' | 'mustache'
 

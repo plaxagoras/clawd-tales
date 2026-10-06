@@ -169,6 +169,14 @@ const STRETCH: Sprite[] = [
   ['o.......o', HEAD, '.kkoookk.', HEAD, LEGS_A],
 ]
 
+/** First session ever: an egg rocks and cracks, and Clawd hatches out. */
+const EGG: Sprite[] = [
+  ['...WWW...', '..WWWWW..', '.WWWWkWW.', '.WWWkWWW.', '..WWWWW..'],
+  ['..WWW....', '.WWWWW...', 'WWWWkWW..', 'WWWkWkWW.', '.WWWWW...'],
+  ['...WWW...', '..WWWWW..', '.WWkWkWW.', '.WkWWWkW.', '..WWWWW..'],
+  ['....WWW..', '...WWWWW.', '..WWkWWWW', '.WWkWkWWW', '...WWWWW.'],
+]
+
 const UMBRELLA: Sprite = ['..UUUUU..', '.UUUUUUU.', 'U...s...U']
 const HEART: Sprite = ['q.q', '.q.']
 const ZED: Sprite = ['ww', '.w', 'ww']
@@ -253,6 +261,8 @@ export function sprite(action: Action, frame: number): Sprite {
       return JUGGLE[Math.floor(frame / 2) % 2] ?? SIT
     case 'stretch':
       return STRETCH[Math.floor(frame / 5) % 2] ?? STAND
+    case 'hatch':
+      return EGG[Math.floor(frame / 2) % EGG.length] ?? STAND
     default:
       return Math.floor(frame / 2) % 2 ? STRIDE : STAND
   }
@@ -342,6 +352,8 @@ export type Extras = {
   face?: Face | null
   /** Three or more helpers out: the boss tie. */
   tie?: boolean
+  /** The project's scarf, a palette key; null with /tales scarf off. */
+  scarf?: string | null
 }
 
 const NONE: Extras = { weather: 'clear', bugs: 0, todos: null }
@@ -404,6 +416,10 @@ const HATS: Record<Hat, Sprite> = {
   captain: ['..WWWWW..', '.WWWzWWW.', 'eeeeeeeee'],
   wizard: ['....b....', '...bbb...', '..bbzbb..', 'bbbbbbbbb'],
   hardhat: ['...zzz...', '.zzzzzzz.', 'yyyyyyyyy'],
+  shell: ['..W.W.W..', '..WWWWW..'],
+  deerstalker: ['...TTT...', '.TTsTsTT.', 'TTTTTTTTT'],
+  beanie: ['....W....', '..ggggg..', '.gGgGgGg.'],
+  pith: ['..SSSSS..', '.SSSSSSS.', 'SSSSSSSSS'],
 }
 
 /** Face accessories, drawn from the eye row down. */
@@ -667,6 +683,22 @@ function fishingLine(grid: string[][], action: Action, x: number, dir: 1 | -1, t
   paint(grid, dir > 0 ? fish : fish.map(r => r.split('').reverse().join('')), at(12) - 1, Math.min(top + 1, GROUND - 3))
 }
 
+/** A scarf on the first body row under the eyes, its tail streaming out behind. */
+function scarf(grid: string[][], rows: Sprite, color: string, x: number, dir: 1 | -1, top: number, eyes: number, frame: number) {
+  // Past the eyes and the arms (a blink frame's arm row has no eyes in it).
+  const arms = (r: string) => r[0] === 'o' && r[8] === 'o'
+  let neck = eyes + 1
+  while (neck < rows.length - 1 && ((rows[neck] ?? '').slice(1, 8).includes('k') || arms(rows[neck] ?? ''))) neck += 1
+  // Under a box or wings the eyes sit low and only legs are left: no scarf.
+  if (!/ooooo/.test(rows[neck] ?? '')) return
+  // Sprite column c lands at x + c facing right, x + (HERO_W - 1 - c) mirrored.
+  const at = (c: number) => (dir > 0 ? x + c : x + HERO_W - 1 - c)
+  const put = (c: number, y: number) => paint(grid, [color], at(c), top + y)
+  for (let c = 0; c <= 7; c++) put(c, neck)
+  put(0, neck + 1)
+  put(-1, neck + (frame % 6 < 3 ? 0 : 1)) // the tail flutters
+}
+
 const WALKING = new Set<Action>(['walk', 'run', 'sneak', 'carry'])
 
 /** Running helpers line up behind each other: four or more make a conga. */
@@ -753,7 +785,7 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
     paint(grid, ['z'], x + ((frame * 5) % 10), Math.max(0, top - 1))
     paint(grid, ['W'], x + ((frame * 11 + 7) % 10), top + 2)
   }
-  const wearsHat = extras.hat && hero.action !== 'trip' && !(wet === 'rain' || wet === 'storm')
+  const wearsHat = extras.hat && hero.action !== 'trip' && hero.action !== 'hatch' && !(wet === 'rain' || wet === 'storm')
   if (wearsHat && extras.hat) {
     const hat = HATS[extras.hat]
     paint(grid, face > 0 ? hat : hat.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - BODY_W, top - hat.length)
@@ -763,6 +795,7 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   if (wear && eyes !== undefined) {
     paint(grid, face > 0 ? wear : wear.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - BODY_W, top + eyes)
   }
+  if (extras.scarf && eyes !== undefined) scarf(grid, sprite(hero.action, frame), extras.scarf, x, face, top, eyes, frame)
   if (extras.tie && eyes !== undefined) onBody(grid, TIE, x, face, top + eyes + 1)
   if (hero.action === 'listen') paint(grid, HEADPHONES, x, top - 2)
   if ((hero.action === 'listen' || hero.action === 'dance') && frame % 12 < 8) {
@@ -867,6 +900,7 @@ const GLYPHS: Record<Action, readonly string[]> = {
   listen: ['♪'],
   juggle: ['∘°', '°∘'],
   stretch: ['\\o/'],
+  hatch: ['◯', '◔', '◑', '◕'],
 }
 
 export function glyph(action: Action, frame: number): string {

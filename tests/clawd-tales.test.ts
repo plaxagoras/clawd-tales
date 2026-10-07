@@ -1,9 +1,12 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { HERO_W, STAGE_ROWS, glyph, lines, mirror, sprite, stage, tierOf, weatherOf } from '../hooks/art'
+import { HERO_W, STAGE_ROWS, glyph, lampsOf, lines, mirror, sprite, stage, tierOf, weatherOf } from '../hooks/art'
 import {
+  ambushCaption,
   bashEggs,
+  dungeonBeat,
+  victoryCaption,
   beat,
   commitMessage,
   ending,
@@ -41,7 +44,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch', 'fight'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -254,6 +257,38 @@ test('bugs, pellets, rain and the alert all draw', () => {
   for (const key of ['x', 'Y', 'j', 'U', 'r', 'v']) expect(all.includes(key)).toBe(true)
 })
 
+test('the dungeon: bricks, lamps that burn down with context, scrolls, chests, slimes and skeletons', () => {
+  const hall = stage({ ...HERO, action: 'read' }, [], 0, 80, { weather: 'storm', bugs: 2, todos: { done: 1, total: 4 }, dungeon: true, lamps: 0, foes: 2 })
+  const all = hall.join('')
+  expect(hall.slice(0, -1).every(r => !r.includes('.'))).toBe(true) // the wall fills every empty pixel
+  for (const key of ['D', 'K', 'E', 'F', 'Q', 'W', 'T', 'z']) expect(all.includes(key)).toBe(true)
+  for (const key of ['j', 'U', 'v', 'b']) expect(all.includes(key)).toBe(false) // no rain, umbrella, clouds or book underground
+  // Context burns the lamp oil: fewer warm bricks as it fills.
+  const warm = (lamps: 0 | 1 | 2 | 3) => stage({ ...HERO }, [], 0, 100, { weather: 'clear', bugs: 0, todos: null, dungeon: true, lamps }).join('').split('E').length
+  expect(warm(0) > warm(2)).toBe(true)
+  expect(warm(2) > warm(3)).toBe(true)
+  expect(lampsOf(null)).toBe(0)
+  expect(lampsOf(60)).toBe(1)
+  expect(lampsOf(80)).toBe(2)
+  expect(lampsOf(95)).toBe(3)
+  // The sword swing, and the meadow keeps its book.
+  expect(stage({ ...HERO, action: 'fight' }, [], 1, 80, { weather: 'clear', bugs: 1, todos: null, dungeon: true }).join('').includes('m')).toBe(true)
+  expect(stage({ ...HERO, action: 'read' }, [], 0, 80).join('').includes('b')).toBe(true)
+})
+
+test('dungeon captions: scrolls, runes, a fight while monsters are out, ambushes and the win', () => {
+  expect(dungeonBeat('Read', { file_path: '/a/art.ts' }, 's').caption).toMatch(/scroll|lamplight/)
+  expect(dungeonBeat('Edit', { file_path: '/a/art.ts' }, 's').action).toBe('dig')
+  expect(dungeonBeat('Edit', { file_path: '/a/art.ts' }, 's', 3).action).toBe('fight')
+  expect(dungeonBeat('Bash', { description: 'Run tests' }, 's', 1).action).toBe('fight')
+  expect(dungeonBeat('Grep', { pattern: 'foo' }, 's').caption).toMatch(/dark halls.*foo/)
+  expect(dungeonBeat('TodoWrite', {}, 's').caption).toMatch(/treasure map/)
+  expect(dungeonBeat('mcp__claude_ai_Gmail__search_threads', {}, 's').caption).toMatch(/Gmail/)
+  expect(ambushCaption('Bash', 1, 's')).toMatch(/skeleton/i)
+  expect(ambushCaption('Bash', 3, 's')).toMatch(/flips the table/)
+  expect(victoryCaption(2)).toMatch(/all 2 skeletons/)
+})
+
 test('every pose fits, mirrors, and has a one-line glyph', () => {
   const rows = stage({ ...HERO }, [], 0, 60)
   expect(rows.length).toBe(STAGE_ROWS)
@@ -262,9 +297,10 @@ test('every pose fits, mirrors, and has a one-line glyph', () => {
   for (const a of ACTIONS) {
     expect(glyph(a, 3).length > 0).toBe(true)
     for (const f of [0, 1, 2, 3]) {
-      const s = sprite(a, f)
-      expect(s.every(r => r.length <= HERO_W)).toBe(true)
-      expect(mirror(s).every(r => r.length === HERO_W)).toBe(true)
+      for (const s of [sprite(a, f), sprite(a, f, true)]) {
+        expect(s.every(r => r.length <= HERO_W)).toBe(true)
+        expect(mirror(s).every(r => r.length === HERO_W)).toBe(true)
+      }
     }
   }
 })
@@ -588,5 +624,52 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(((await run('hat tophat')) as { text?: string }).text).toMatch(/puts on the tophat/)
     expect(((await run('face monocle')) as { text?: string }).text).toMatch(/glasses, shades, mustache/)
     expect(((await run('hat none')) as { text?: string }).text).toMatch(/takes off/)
+  })
+
+  test(`the dungeon theme: slimes to fight, gold for clean calls, chests for tasks, a skeleton beaten (${surface})`, async ($, on) => {
+    const clock = world(on)
+    let output = 'Tests: 2 failed, 5 passed'
+    let fail = false
+    on('prompt.submit', (_, e) => e as never)
+    on('tool.call', () => (fail ? { result: { stdout: '', stderr: 'boom' }, text: 'boom', isError: true } : { result: { stdout: output, stderr: '' }, text: output }) as never)
+    await $.session.start({ cwd: '/work', surface, isInteractive: true })
+    const run = (args: string) =>
+      $.command.run({ command: 'tales', args, origin: { kind: 'composer' }, presentation: 'command' } as never) as Promise<{ text?: string }>
+    expect((await run('theme')).text).toMatch(/meadow/)
+    expect((await run('dungeon')).text).toMatch(/Into the dungeon/)
+    const see = async (text: RegExp) => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      const found = await band.find({ type: 'Text', text })
+      await band.unmount()
+      return found
+    }
+    await $.prompt.submit({ text: 'fix the tests' } as never)
+    await clock.advance(200)
+    expect(await see(/ventured into the dungeon/)).toBeDefined()
+    await $.tool.call({ tool: 'Bash', command: 'npm test', description: 'Run the tests', tool_use_id: 't1' } as never)
+    await clock.advance(200)
+    expect(await see(/2 slimes ooze/)).toBeDefined()
+    await $.tool.call({ tool: 'Edit', file_path: '/src/a.ts', tool_use_id: 't2' } as never)
+    await clock.advance(200)
+    expect(await see(/battles the monsters in a\.ts|swings at the bugs in a\.ts/)).toBeDefined()
+    output = 'Tests: 0 failed, 7 passed'
+    await $.tool.call({ tool: 'Bash', command: 'npm test', description: 'Run the tests', tool_use_id: 't3' } as never)
+    await clock.advance(200)
+    expect(await see(/squashes all 2 slimes/)).toBeDefined()
+    expect(await see(/◉ \d+ gold/)).toBeDefined()
+    fail = true
+    await $.tool.call({ tool: 'Bash', command: 'make', tool_use_id: 't4' } as never)
+    await clock.advance(200)
+    expect(await see(/skeleton/i)).toBeDefined()
+    fail = false
+    output = 'built'
+    await $.tool.call({ tool: 'Bash', command: 'make', tool_use_id: 't5' } as never)
+    await clock.advance(200)
+    expect(await see(/beats the skeleton/)).toBeDefined()
+    await $.tool.call({ tool: 'TodoWrite', todos: [{ content: 'Slay the dragon', status: 'completed' }, { content: 'Loot', status: 'pending' }], tool_use_id: 't6' } as never)
+    await $.tool.call({ tool: 'TodoWrite', todos: [{ content: 'Slay the dragon', status: 'completed' }, { content: 'Loot', status: 'pending' }], tool_use_id: 't7' } as never)
+    await clock.advance(200)
+    expect(await see(/1\/2 chests/)).toBeDefined()
+    expect((await run('meadow')).text).toMatch(/meadow/)
   })
 }

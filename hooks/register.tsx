@@ -1,14 +1,17 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Action, Emote, Face, Form, Fx, FxKind, Hat, Hero, Holiday, Limit, Stats, Worker } from '../types'
-import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lines, speed, stage, tierOf, weatherOf } from './art'
+import type { Action, Emote, Face, Form, Fx, FxKind, Hat, Hero, Holiday, Limit, Stats, Theme, Worker } from '../types'
+import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lampsOf, lines, speed, stage, tierOf, weatherOf } from './art'
 import type { Egg } from './story'
 import {
   COMBO_AT,
   CROWN_AT,
   FORM_HAT,
   GROW_AT,
+  ambushCaption,
+  dungeonBeat,
+  victoryCaption,
   NEW_STATS,
   REST,
   THINKING,
@@ -56,6 +59,8 @@ const todos = atom({ plugin: 'clawd-tales', key: 'todos' } as const, null)
 const fx = atom({ plugin: 'clawd-tales', key: 'fx' } as const, [])
 const shiny = atom({ plugin: 'clawd-tales', key: 'shiny' } as const, null)
 const combo = atom({ plugin: 'clawd-tales', key: 'combo' } as const, 0)
+const gold = atom({ plugin: 'clawd-tales', key: 'gold' } as const, 0)
+const theme = atom({ plugin: 'clawd-tales', key: 'theme' } as const, 'meadow' as Theme)
 
 const TICK_MS = 200
 const CALM_TICK_MS = 1000 // calm mode: one beat a second
@@ -70,12 +75,13 @@ const THINK_POSE_MS = 8000 // no tool call for this long mid-turn: a thought bub
 const MOOD_MS = 4000 // a blush or a sweat drop lasts this long
 const VISITOR_ODDS = 1 / 25 // per prompt
 const SHINY_ODDS = 1 / 100 // per session
-const FX_MS: Record<FxKind, number> = { confetti: 2200, plane: 3500, boxes: 6000, train: 8000, whale: 16000, ufo: 10000, warp: 1200 }
+const FX_MS: Record<FxKind, number> = { confetti: 2200, plane: 3500, boxes: 6000, train: 8000, whale: 16000, ufo: 10000, warp: 1200, coin: 900, coins: 1600, poof: 700 }
 const HOLIDAYS: readonly Holiday[] = ['halloween', 'christmas', 'newyear', 'valentine', 'aprilfools']
 
 // Module-level: a reload starts these over, and session.start picks the story back up.
 let timer: Timer | undefined
 let isCalm = false // mirrors the calm atom for the tick's own pacing
+let isDungeon = false // mirrors the theme atom, for captions
 let ticks = 0
 let cols = 100
 let heroCalls = 0 // main-loop tool calls still running: a trip waits for them to end
@@ -137,7 +143,7 @@ function restStep(since: number, now: number, lim: Limit | null, last?: Action):
   const action = t < REST.sitMs ? 'sit' : t < REST.yawnMs ? 'yawn' : 'sleep'
   const fidget = action === 'sit' ? (fishing(t) ?? fidgetAt(t, Math.floor(since / 1000))) : null
   if (fidget) return { action: fidget.action, caption: fidget.caption, emote: fidget.emote ?? null }
-  return { action, caption: restCaption(action, last), emote: null }
+  return { action, caption: restCaption(action, last, isDungeon), emote: null }
 }
 
 function holidayNow(d: Date): Holiday | null {
@@ -177,7 +183,7 @@ function ensureTimer($: EngineInterface) {
     const crew = await read($, workers)
 
     if (cur.mode === 'ending' && now - cur.since >= LINGER_MS) {
-      cur = { ...cur, mode: 'resting', since: now, action: 'sit', caption: restCaption('sit') }
+      cur = { ...cur, mode: 'resting', since: now, action: 'sit', caption: restCaption('sit', undefined, isDungeon) }
       await update($, hero, () => cur)
     }
     if (cur.emote && cur.mode !== 'resting' && cur.emote !== 'think' && now > (cur.emoteUntil ?? 0)) {
@@ -386,7 +392,7 @@ async function begin($: EngineInterface, text = '') {
     ...cur,
     mode: 'working',
     action: 'walk',
-    caption: startCaption({ mood, woke: cur.action === 'sleep', holiday: holidayNow(d), hour: d.getHours() }),
+    caption: startCaption({ mood, woke: cur.action === 'sleep', holiday: holidayNow(d), hour: d.getHours(), dungeon: isDungeon }),
     scene: cur.mode === 'idle' ? (cur.scene + 1) % SCENE_COUNT : cur.scene,
     steps: 0,
     since: now,
@@ -414,6 +420,18 @@ async function onMcp($: EngineInterface, tool: string) {
   await update($, fx, list => list.map(f => (f.kind === 'warp' && f.id === fxId ? { ...f, color: warpColor(server) } : f)))
 }
 
+/** Dungeon gold: a coin pops over Claude, a burst for a chest or a fight won. */
+async function earn($: EngineInterface, n: number, burst = false) {
+  if (!isDungeon || n <= 0) return
+  await update($, gold, g => g + n)
+  await addFx($, burst ? 'coins' : 'coin', (await read($, hero)).x)
+}
+
+/** The call as a beat, in the stage's own words. */
+async function themed($: EngineInterface, tool: string, args: Record<string, unknown>, seed: string) {
+  return isDungeon ? dungeonBeat(tool, args, seed, await read($, bugs)) : beat(tool, args, seed)
+}
+
 /** Test output: failures drop bugs into the scene, a green run lets Claude eat them. */
 async function onTests($: EngineInterface, command: string, output: string, isMain: boolean) {
   const counts = testCounts(command, output)
@@ -422,10 +440,15 @@ async function onTests($: EngineInterface, command: string, output: string, isMa
   if (counts.failed > 0) {
     const n = Math.min(counts.failed, 8)
     await update($, bugs, () => n)
-    if (isMain) await heroBeat($, { action: 'trip', caption: `${counts.failed} bug${counts.failed === 1 ? '' : 's'} crawl out of the test run` }, 0)
+    const s = counts.failed === 1 ? '' : 's'
+    const caption = isDungeon ? `${counts.failed} slime${s} ooze${s ? '' : 's'} out of the test run` : `${counts.failed} bug${s} crawl out of the test run`
+    if (isMain) await heroBeat($, { action: 'trip', caption }, 0)
     tripUntil = (await $.clock.now()) + TRIP_MS
   } else if (counts.passed > 0 && had > 0) {
-    if (isMain) await heroBeat($, { action: 'cheer', caption: `Claude eats all ${had} bug${had === 1 ? '' : 's'}. Tests are green.` }, 0)
+    const s = had === 1 ? '' : 's'
+    const caption = isDungeon ? `Claude squashes ${had === 1 ? 'the slime' : `all ${had} slimes`}. Tests are green. +${had} gold` : `Claude eats all ${had} bug${s}. Tests are green.`
+    if (isMain) await heroBeat($, { action: 'cheer', caption }, 0)
+    if (isMain) await earn($, had, true)
     for (let n = 1; n <= had; n++) $.clock.after(n * 350, () => void update($, bugs, b => Math.max(0, b - 1)))
   }
 }
@@ -441,7 +464,11 @@ async function onTodos($: EngineInterface, input: Record<string, unknown>) {
   if (prev && done.length > prev.done) {
     const last = done[done.length - 1]
     const what = typeof last?.content === 'string' ? last.content : 'a task'
-    await heroBeat($, { action: 'cheer', caption: next ? `Claude gobbles a pellet: ${what}` : 'Claude clears the whole quest list!' }, 0)
+    const caption = isDungeon
+      ? next ? `Claude opens a treasure chest: ${what}` : 'Claude opens the last chest on the map!'
+      : next ? `Claude gobbles a pellet: ${what}` : 'Claude clears the whole quest list!'
+    await heroBeat($, { action: 'cheer', caption }, 0)
+    await earn($, 3, true)
   }
 }
 
@@ -508,10 +535,19 @@ function runDemo($: EngineInterface) {
     await update($, hero, (h): Hero => ({ ...h, action: 'hatch', caption: 'An egg wobbles…', since: now }))
   })
   at(1100, () => heroBeat($, { action: 'cheer', caption: 'A Clawd hatches! Hello!' }, 0))
-  for (const [ms, tool, args] of steps) at(ms, () => heroBeat($, beat(tool, args, `demo${ms}`)))
+  for (const [ms, tool, args] of steps) {
+    at(ms, async () => {
+      await heroBeat($, await themed($, tool, args, `demo${ms}`))
+      await earn($, 1)
+    })
+  }
   at(2000, () => onTodos($, { todos: [1, 2, 3, 4, 5].map(n => ({ content: `Task ${n}`, status: n === 1 ? 'in_progress' : 'pending' })) }))
   at(3000, () => update($, context, () => 74)) // rain
-  at(11000, () => heroBeat($, { action: 'run', caption: 'Claude runs off to run the test suite' }))
+  at(11000, () => heroBeat($, { action: 'run', caption: isDungeon ? 'Claude dashes down the hall to run the test suite' : 'Claude runs off to run the test suite' }))
+  // The dungeon cut: with slimes on the floor, the next edit is a sword fight.
+  at(13500, async () => {
+    if (isDungeon) await heroBeat($, await themed($, 'Edit', { file_path: '/src/hooks/story.ts' }, 'demo13500'))
+  })
   at(12000, () => onTests($, 'npm test', 'Tests: 3 failed, 9 passed', true))
   at(17500, () => update($, alert, () => 'Claude needs you: allow Bash(rm -rf build)?'))
   at(21000, () => update($, alert, () => null))
@@ -550,7 +586,7 @@ function runDemo($: EngineInterface) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, demo, hat, face, scarf' })
+    await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, demo, theme, hat, face, scarf' })
     sessionTokens = 0
     tokensSeen = 0
     const hatSaved = await $.store.get('hat')
@@ -559,6 +595,8 @@ export const register: Register = on => {
     wornFace = FACES_TO_WEAR.includes(faceSaved as Face) ? (faceSaved as Face) : null
     stats = readStats(await $.store.get('stats'))
     scarfOn = (await $.store.get('scarf')) !== false
+    isDungeon = (await $.store.get('theme')) === 'dungeon'
+    await update($, theme, () => (isDungeon ? 'dungeon' : 'meadow'))
     try {
       scarfKey = scarfColor(await $.session.root())
     } catch {
@@ -598,6 +636,19 @@ export const register: Register = on => {
       return { text: arg === 'calm' ? 'Calm: one beat a second, Claude stays put between tool calls.' : 'Lively: 5 fps, wandering on.' }
     }
     const [word, name] = arg.split(/\s+/)
+    // /tales theme dungeon|meadow, or just /tales dungeon.
+    const pickTheme = word === 'theme' ? name : word === 'dungeon' || word === 'meadow' ? word : undefined
+    if (word === 'theme' || pickTheme) {
+      if (pickTheme !== 'dungeon' && pickTheme !== 'meadow') return { text: `The stage is the ${isDungeon ? 'dungeon' : 'meadow'}. Use /tales theme dungeon|meadow.` }
+      isDungeon = pickTheme === 'dungeon'
+      await update($, theme, () => pickTheme)
+      await $.store.set('theme', pickTheme)
+      return {
+        text: isDungeon
+          ? 'Into the dungeon: lamps for context, scrolls, treasure chests for tasks, gold for clean calls, monsters for failures.'
+          : 'Back to the meadow.',
+      }
+    }
     if (word === 'scarf') {
       if (name !== 'on' && name !== 'off') return { text: `The scarf is ${scarfOn ? 'on' : 'off'}. Use /tales scarf on|off.` }
       scarfOn = name === 'on'
@@ -639,7 +690,7 @@ export const register: Register = on => {
         ? ` Clawd is a ${stats.form} (${stats.xp} tool calls).`
         : ` Clawd is a hatchling: ${stats.xp}/${GROW_AT} tool calls to grow up.`
     return {
-      text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}).${growth}${sparkle} Use /tales on|off|calm|lively|demo, /tales hat <name>, /tales face <name>, /tales scarf on|off.`,
+      text: `Clawd tales is ${(await read($, isOn)) ? 'on' : 'off'} (${mode}) in the ${isDungeon ? 'dungeon' : 'meadow'}.${growth}${sparkle} Use /tales on|off|calm|lively|demo, /tales theme dungeon|meadow, /tales hat <name>, /tales face <name>, /tales scarf on|off.`,
     }
   })
 
@@ -693,7 +744,7 @@ export const register: Register = on => {
     const command = e.tool === 'Bash' && typeof args.command === 'string' ? args.command : ''
     const eggs = owner ? [] : bashEggs(command)
     const egg = eggs[0] ? eggBeat(eggs[0], command) : null
-    const b = egg ?? beat(e.tool, args, seed)
+    const b = egg ?? (await themed($, e.tool, args, seed))
     const asks = e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode'
     // A main-loop call means Claude is working, whatever the band missed.
     if (!owner && (await read($, hero)).mode !== 'working') await begin($)
@@ -701,7 +752,8 @@ export const register: Register = on => {
     else {
       await heroBeat($, b, 1, egg?.emote)
       // No counting before the hatch: a mid-session install would skip the egg forever.
-      if (stats) stats = countCall(stats, b.action)
+      // A sword fight counts as the work it interrupted.
+      if (stats) stats = countCall(stats, b.action === 'fight' ? beat(e.tool, args, seed).action : b.action)
     }
     if (eggs.includes('sl')) await addFx($, 'train', 0)
     if (asks) {
@@ -744,17 +796,28 @@ export const register: Register = on => {
           await addFx($, 'train', 0)
         } else if (errStreak >= 3) {
           tripUntil = (await $.clock.now()) + FLIP_MS
-          await heroBeat($, { action: 'flip', caption: `(╯°□°)╯︵ ┻━┻  ${errStreak} stumbles in a row. Claude flips the table` }, 0)
+          const caption = isDungeon ? ambushCaption(e.tool, errStreak, seed) : `(╯°□°)╯︵ ┻━┻  ${errStreak} stumbles in a row. Claude flips the table`
+          await heroBeat($, { action: 'flip', caption }, 0)
         } else if (errStreak === 2) {
           tripUntil = (await $.clock.now()) + FLIP_MS
-          await heroBeat($, { action: 'dizzy', caption: 'Claude sees stars: two stumbles in a row' }, 0)
+          await heroBeat($, { action: 'dizzy', caption: isDungeon ? ambushCaption(e.tool, 2, seed) : 'Claude sees stars: two stumbles in a row' }, 0)
         } else {
-          await heroBeat($, { action: 'trip', caption: tripCaption(e.tool, seed) }, 0)
+          await heroBeat($, { action: 'trip', caption: isDungeon ? ambushCaption(e.tool, 1, seed) : tripCaption(e.tool, seed) }, 0)
         }
         await update($, combo, () => 0)
       }
     } else if (!owner) {
+      const beaten = errStreak
       errStreak = 0
+      if (isDungeon && beaten > 0) {
+        // The skeletons fall: a puff where they stood, and their coins.
+        const h = await read($, hero)
+        await addFx($, 'poof', h.dir > 0 ? h.x + HERO_W : h.x - 6)
+        await heroBeat($, { action: 'cheer', caption: victoryCaption(beaten) }, 0)
+        await earn($, beaten + 1, true)
+      } else {
+        await earn($, 1)
+      }
       await onCombo($)
       if (eggs.length > 0) await onEggs($, eggs, command)
     }
@@ -772,10 +835,10 @@ export const register: Register = on => {
     const solo = cur.mode !== 'working'
     if (solo) {
       const now = await $.clock.now()
-      await update($, hero, (h): Hero => ({ ...h, mode: 'working', action: 'sweep', caption: 'Claude sweeps up the old context…', since: now, emote: null }))
+      await update($, hero, (h): Hero => ({ ...h, mode: 'working', action: 'sweep', caption: isDungeon ? 'Claude sweeps the hall and refills the lamps…' : 'Claude sweeps up the old context…', since: now, emote: null }))
       ensureTimer($)
     } else {
-      await heroBeat($, { action: 'sweep', caption: 'Claude sweeps up the old context…' }, 0)
+      await heroBeat($, { action: 'sweep', caption: isDungeon ? 'Claude sweeps the hall and refills the lamps…' : 'Claude sweeps up the old context…' }, 0)
     }
     const result = await next(e)
     if (result.messages) {
@@ -914,8 +977,13 @@ export const register: Register = on => {
           (isLate(hour) ? 'nightcap' : null) ??
           (demoGrowth === 'shell' ? 'shell' : demoGrowth ? FORM_HAT[demoGrowth] : null) ??
           (stats?.form ? FORM_HAT[stats.form] : stats ? 'shell' : null))
+    const dungeon = (await read($, theme)) === 'dungeon'
+    const coins = await read($, gold)
     const extras = {
-      weather: weatherOf(await read($, context)),
+      weather: dungeon ? ('clear' as const) : weatherOf(await read($, context)),
+      dungeon,
+      lamps: lampsOf(await read($, context)),
+      foes: dungeon ? errStreak : 0,
       bugs: await read($, bugs),
       todos: task,
       now,
@@ -942,16 +1010,17 @@ export const register: Register = on => {
     const tone = (p: number) => (p >= 95 ? '#e5534b' : p >= 80 ? '#e0b84c' : undefined)
     const hasRoom = rows >= stageLines.length + captionRows + 1
     const roster =
-      !hasRoom || (crew.length === 0 && !task && gauges.length === 0 && streak < COMBO_AT) ? null : (
+      !hasRoom || (crew.length === 0 && !task && gauges.length === 0 && streak < COMBO_AT && !(dungeon && coins > 0)) ? null : (
         <Box flexDirection="row">
           {gauges.map((g, n) => (
             <Text color={tone(g.percent)} dimColor={!tone(g.percent)}>
               {`${n ? ' · ' : ''}${g.label} ${g.percent}%`}
             </Text>
           ))}
-          {gauges.length > 0 && (task || crew.length > 0 || streak >= COMBO_AT) ? <Text dimColor>{'   '}</Text> : null}
+          {gauges.length > 0 && (task || crew.length > 0 || streak >= COMBO_AT || (dungeon && coins > 0)) ? <Text dimColor>{'   '}</Text> : null}
+          {dungeon && coins > 0 ? <Text color="#f2d24b">{`◉ ${coins} gold  `}</Text> : null}
           {streak >= COMBO_AT ? <Text color="#e0b84c" bold>{`×${streak} combo${streak >= CROWN_AT ? ' 👑' : ''}  `}</Text> : null}
-          {task ? <Text color="#f5d76e">{`● ${task.done}/${task.total} tasks  `}</Text> : null}
+          {task ? <Text color="#f5d76e">{dungeon ? `▣ ${task.done}/${task.total} chests  ` : `● ${task.done}/${task.total} tasks  `}</Text> : null}
           {crew.slice(0, 4).map(w => (
             <Text color={TIER_COLOR[w.state === 'failed' ? 'other' : w.tier]}>
               {`${w.state === 'running' ? '●' : w.state === 'failed' ? '✗' : '✓'} ${fit(w.label, Math.max(8, Math.floor(cols / 5) - 3))}  `}

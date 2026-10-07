@@ -58,6 +58,17 @@ You ask Claude to fix a failing test. Clawd runs off to `pytest` and three bugs 
 
 Under the caption, a status line shows `ctx 74% · 5h 22% · 7d 23%`, plus the todo count and a roster of the helpers. Numbers turn yellow at 80% and red at 95%.
 
+### The dungeon
+
+`/tales theme dungeon` sends Clawd down a brick hallway lit by wall lamps. The story is the same, told underground:
+
+- The lamps are your context. As it fills they burn low, then half of them go out, and near the end only the lamp next to Clawd still flickers. Compaction refills them.
+- Reading a file pulls out a scroll instead of a book.
+- Your todo list is a row of treasure chests. Finishing a task opens one and coins spill out.
+- Every clean tool call pops a gold coin over Clawd's head, and the status line keeps the count.
+- A failing test run lets slimes loose on the floor. Until the tests pass, every edit or command is a sword fight. A green run squashes them for gold.
+- A failed tool call brings out a skeleton. The next clean call beats it.
+
 The band shrinks with your terminal: the full band at 8 rows, no sky at 6, then a single line.
 
 ## Install
@@ -83,6 +94,7 @@ claude --plugin-dir ./clawd-tales
 | Command | What it does |
 |---|---|
 | `/tales demo` | Plays a short story: a hatching, helpers, bugs, pellets, weather, a permission call and growing up. Your own Clawd's progress isn't touched |
+| `/tales theme dungeon` / `meadow` | Swaps the meadow for a lamplit dungeon hallway (`/tales dungeon` works too). Saved between sessions |
 | `/tales calm` | One frame a second, and nobody wanders between tool calls |
 | `/tales lively` | Back to 5 frames a second (the default) |
 | `/tales off` / `/tales on` | Hide or show the band |

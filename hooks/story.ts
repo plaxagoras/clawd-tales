@@ -84,6 +84,57 @@ export function beat(tool: string, args: Args, seed: string): Beat {
   }
 }
 
+/**
+ * The same call told in the dungeon: scrolls, runes, ravens and spells. With monsters on the
+ * floor, editing and running turn into a fight.
+ */
+export function dungeonBeat(tool: string, args: Args, seed: string, foes = 0): Beat {
+  const file = base(str(args, 'file_path') || str(args, 'notebook_path') || str(args, 'path'))
+  const fight = (what: string): Beat | null =>
+    foes > 0 ? { action: 'fight', caption: pick([`Claude battles the monster${foes === 1 ? '' : 's'} in ${what}`, `Claude swings at the bugs in ${what}`], seed) } : null
+  switch (tool) {
+    case 'Read':
+      return { action: 'read', caption: pick([`Claude unrolls the scroll of ${file}`, `Claude reads ${file} by lamplight`, `Claude pulls out the scroll of ${file}`], seed) }
+    case 'Edit':
+    case 'NotebookEdit':
+      return fight(file) ?? { action: 'dig', caption: pick([`Claude chisels new runes into ${file}`, `Claude digs through ${file}`], seed) }
+    case 'Write':
+      return fight(file) ?? { action: 'dig', caption: pick([`Claude carves a new tablet: ${file}`, `Claude lays the stones of ${file}`], seed) }
+    case 'Grep':
+    case 'Glob':
+      return { action: 'sneak', caption: `Claude searches the dark halls for “${clip(str(args, 'pattern'), 40)}”` }
+    case 'Bash': {
+      const what = clip(str(args, 'description') || str(args, 'command'), 60)
+      return fight(`the ${lower(what)}`) ?? { action: 'run', caption: pick([`Claude casts a spell: ${lower(what)}`, `Claude dashes down the hall to ${lower(what)}`], seed) }
+    }
+    case 'WebFetch':
+      return { action: 'fly', caption: `Claude sends a raven to ${host(str(args, 'url'))}` }
+    case 'WebSearch':
+      return { action: 'fly', caption: `Claude asks the oracle about “${clip(str(args, 'query'), 40)}”` }
+    case 'Agent':
+    case 'Task':
+      return { action: 'carry', caption: `Claude recruits a party member: ${clip(str(args, 'description'), 50)}` }
+    case 'Skill':
+      return { action: 'read', caption: `Claude opens the ${str(args, 'skill') || 'old'} grimoire` }
+    case 'TodoWrite':
+      return { action: 'read', caption: 'Claude marks the treasure map' }
+    default:
+      return beat(tool, args, seed)
+  }
+}
+
+/** A failed call in the dungeon: a skeleton steps out and lands a hit. */
+export function ambushCaption(tool: string, foes: number, seed: string): string {
+  if (foes >= 3) return `(╯°□°)╯︵ ┻━┻  ${foes} skeletons! Claude flips the table`
+  if (foes === 2) return 'A second skeleton! Claude sees stars'
+  return pick([`A skeleton jumps out of the ${tool}. Claude takes a hit`, `The ${tool} was a trap. A skeleton blocks the way`], seed)
+}
+
+/** The next clean call after an ambush. */
+export function victoryCaption(foes: number): string {
+  return foes === 1 ? 'Claude beats the skeleton. A coin drops!' : `Claude beats all ${foes} skeletons. Coins drop!`
+}
+
 function lower(s: string): string {
   return s ? s.charAt(0).toLowerCase() + s.slice(1) : s
 }
@@ -325,13 +376,13 @@ const HOLIDAY_START: Record<Holiday, string> = {
 }
 
 /** The opening caption: the mood of the prompt first, then waking, the holiday, the hour. */
-export function startCaption(o: { mood: 'thanks' | 'scold' | null; woke: boolean; holiday: Holiday | null; hour: number }): string {
+export function startCaption(o: { mood: 'thanks' | 'scold' | null; woke: boolean; holiday: Holiday | null; hour: number; dungeon?: boolean }): string {
   if (o.mood === 'thanks') return 'Claude blushes and sets out again…'
   if (o.mood === 'scold') return 'Claude rubs its head sheepishly and tries again…'
   if (o.woke) return 'Claude wakes with a start and sets out…'
-  if (o.holiday) return HOLIDAY_START[o.holiday]
+  if (o.holiday) return o.dungeon ? HOLIDAY_START[o.holiday].replace('set out', 'ventured into the dungeon') : HOLIDAY_START[o.holiday]
   if (isLate(o.hour)) return 'Claude pours a coffee and sets out…'
-  return 'Once upon a prompt, Claude set out…'
+  return o.dungeon ? 'Once upon a prompt, Claude ventured into the dungeon…' : 'Once upon a prompt, Claude set out…'
 }
 
 export type Fidget = { action: Action; caption: string; emote?: Emote }
@@ -396,8 +447,8 @@ export function fishing(sitFor: number): Fidget | null {
   return { action: 'fish', caption: 'Claude casts a line while it waits for you.' }
 }
 
-export function restCaption(action: 'sit' | 'yawn' | 'sleep', last?: Action): string {
-  if (action === 'sit') return 'Claude sits by the path and waits for you.'
+export function restCaption(action: 'sit' | 'yawn' | 'sleep', last?: Action, dungeon = false): string {
+  if (action === 'sit') return dungeon ? 'Claude sits by a lamp and waits for you.' : 'Claude sits by the path and waits for you.'
   if (action === 'yawn') return 'Claude yawns…'
   return `Claude dozes off, dreaming of ${dreamOf(last)}. z z z`
 }

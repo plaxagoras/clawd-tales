@@ -46,6 +46,12 @@ const PALETTE: Record<string, string> = {
   A: '#8d6cc4', // witch hat, bats
   O: '#e8892b', // pumpkin, dusk sun
   c: '#4fa3e0', // whale
+  D: '#25232b', // dungeon brick
+  K: '#35323d', // mortar
+  E: '#3b312c', // lamplit brick
+  J: '#4a3d33', // lamplit mortar
+  F: '#3d3945', // flagstone
+  Q: '#79c24a', // slime
 }
 
 type Sprite = readonly string[]
@@ -177,6 +183,17 @@ const EGG: Sprite[] = [
   ['....WWW..', '...WWWWW.', '..WWkWWWW', '.WWkWkWWW', '...WWWWW.'],
 ]
 
+/** Dungeon: a sword raised, then thrust at whatever is on the floor. */
+const FIGHT: Sprite[] = [
+  ['.ooooooo.m', '.okoooko.m', 'ookoookoos', HEAD, LEGS_A],
+  [HEAD, EYES, 'ookoookoosmmm', HEAD, LEGS_B],
+]
+/** Dungeon: Claude pulls out a scroll instead of a book. */
+const SCROLL: Sprite[] = [
+  ['.ooooooo.sss', '.okoooko.BkB', 'ookoookooBBB', '.ooooooo.sss', LEGS_A],
+  ['.ooooooo.sss', '.ooooooo.BkB', 'oooooooooBBB', '.ooooooo.sss', LEGS_A], // blink
+]
+
 const UMBRELLA: Sprite = ['..UUUUU..', '.UUUUUUU.', 'U...s...U']
 const HEART: Sprite = ['q.q', '.q.']
 const ZED: Sprite = ['ww', '.w', 'ww']
@@ -200,11 +217,13 @@ function lift(action: Action, frame: number): number {
   return 0
 }
 
-export function sprite(action: Action, frame: number): Sprite {
+export function sprite(action: Action, frame: number, dungeon = false): Sprite {
   const two = frame % 2
   switch (action) {
     case 'read':
-      return READ[frame % 12 === 0 ? 1 : 0] ?? STAND
+      return (dungeon ? SCROLL : READ)[frame % 12 === 0 ? 1 : 0] ?? STAND
+    case 'fight':
+      return FIGHT[Math.floor(frame / 2) % 2] ?? STAND
     case 'dig':
       return DIG[Math.floor(frame / 2) % 2] ?? STAND
     case 'fly':
@@ -310,6 +329,14 @@ const SCENES: readonly SceneDef[] = [
   },
 ]
 
+/** The dungeon hallway's props, one per scene: a door, barrels, a portcullis, a bone pile. */
+const DUNGEON_PROPS: readonly Sprite[] = [
+  ['..eee..', '.eTTTe.', 'eTTTTTe', 'eTTTTTe', 'eTTTyTe', 'eTTTTTe', 'eTTTTTe'],
+  ['.......', '.......', '.TTT...', 'TsssT..', 'TTTTT.T', 'TsssTTs', 'TTTTTTT'],
+  ['mmmmmmm', 'm.m.m.m', 'm.m.m.m', 'mmmmmmm', 'm.m.m.m', 'm.m.m.m', 'm.m.m.m'],
+  ['.......', '.......', '.......', '..WWW..', '.WkWkW.', 'WWWWWWW', 'WkWWWkW'],
+]
+
 export const SCENE_COUNT = SCENES.length
 
 const TINT: Record<Worker['tier'], string> = { opus: 'p', sonnet: 't', haiku: 'h', fable: 'f', other: 'e' }
@@ -329,6 +356,14 @@ export function tierOf(model: string | undefined): Worker['tier'] {
 
 /** Context fill as weather: clear, clouds, rain, storm. */
 export type Weather = 'clear' | 'clouds' | 'rain' | 'storm'
+/** Context fill as lamp oil, in the dungeon: 0 all bright, 1 burning low, 2 half out, 3 one lamp left. */
+export function lampsOf(percent: number | null): 0 | 1 | 2 | 3 {
+  if (percent === null || percent < 50) return 0
+  if (percent < 70) return 1
+  if (percent < 85) return 2
+  return 3
+}
+
 export function weatherOf(percent: number | null): Weather {
   if (percent === null || percent < 50) return 'clear'
   if (percent < 70) return 'clouds'
@@ -354,6 +389,12 @@ export type Extras = {
   tie?: boolean
   /** The project's scarf, a palette key; null with /tales scarf off. */
   scarf?: string | null
+  /** The dungeon theme: a lamplit hallway instead of the meadow and its weather. */
+  dungeon?: boolean
+  /** Dungeon lamp level from lampsOf. */
+  lamps?: 0 | 1 | 2 | 3
+  /** Dungeon: skeletons squaring up to Claude after failed calls. */
+  foes?: number
 }
 
 const NONE: Extras = { weather: 'clear', bugs: 0, todos: null }
@@ -388,8 +429,8 @@ function glanced(rows: Sprite, look: -1 | 1): Sprite {
   })
 }
 
-function critter(grid: string[][], action: Action, x: number, dir: 1 | -1, frame: number, body?: string, look?: -1 | 1 | null, rise = 0) {
-  const raw = sprite(action, frame)
+function critter(grid: string[][], action: Action, x: number, dir: 1 | -1, frame: number, body?: string, look?: -1 | 1 | null, rise = 0, dungeon = false) {
+  const raw = sprite(action, frame, dungeon)
   const art = body ? raw.map(r => r.replaceAll('o', body)) : raw
   let drawn = dir < 0 ? mirror(art) : art
   if (look && !body) drawn = glanced(drawn, look)
@@ -431,7 +472,7 @@ const FACES: Record<Face, Sprite> = {
 /** Which sprite row the eyes are on, per pose; poses without a usable face are left out. */
 const EYE_ROW: Partial<Record<Action, number>> = {
   walk: 1, run: 1, read: 1, dig: 1, sneak: 1, sit: 1, wave: 1, scratch: 1, look: 1, wink: 1, fish: 1,
-  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2,
+  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2, fight: 1,
 }
 /** Three or more helpers out: Claude is the boss, collar and tie under the eyes. */
 const TIE: Sprite = ['...WrW...', '....r....']
@@ -503,6 +544,31 @@ const TRAIN: Sprite = [
   '.m.m...m.m.....m.....m.....m.....m....',
 ].map(r => r.replace(/ /g, '.'))
 const CONFETTI = ['r', 'z', 't', 'q', 'b', 'h']
+/** A gold coin, spinning edge-on and back. */
+const COIN: Sprite[] = [['zz', 'Oz'], ['z', 'O'], ['zz', 'zO']]
+/** Dungeon todos: one closed chest per pending item. */
+const CHEST: Sprite = ['.TTT.', 'TyzyT', 'TTTTT']
+/** Dungeon test failures: slimes squishing along the floor. */
+const SLIME: Sprite[] = [
+  ['.QQQ.', 'QkQkQ', 'QQQQQ'],
+  ['.....', 'QkQkQ', 'QQQQQ'],
+]
+/** Dungeon tool errors: a skeleton with a club, facing Claude. */
+const SKELETON: Sprite[] = [
+  ['.WWW.', 'WkWkW', '.WWWs', 'WWWWs', '.W.W.'],
+  ['.WWW.', 'WkWkW', '.WWW.', 'WWWWs', '.W.Ws'],
+]
+const LAMP_FLAME: Sprite[] = [
+  ['.z.', 'zlz', '.O.'],
+  ['z..', '.lz', '.O.'],
+]
+const LAMP_LOW: Sprite = ['...', '.z.', '.O.']
+const LAMP_OUT: Sprite[] = [
+  ['.v.', 'v..', '...'],
+  ['v..', '.v.', '...'],
+]
+const SCONCE: Sprite = ['sss', '.s.']
+const LAMP_TOP = 2
 
 /** One effect at its age: where it is, drawn over the stage. */
 function effect(grid: string[][], fx: Fx, now: number, frame: number, cols: number) {
@@ -544,6 +610,30 @@ function effect(grid: string[][], fx: Fx, now: number, frame: number, cols: numb
     case 'ufo':
       paint(grid, UFO[frame % 2] ?? [], Math.round(cols - t * (cols + 10)), 0, true)
       return
+    case 'coin': {
+      // A coin pops up over Claude's head, spinning, and fades.
+      const spin = COIN[Math.floor(frame / 2) % COIN.length] ?? []
+      if (t < 0.85) paint(grid, spin, Math.round(fx.x + 4), Math.max(0, Math.round(3 - t * 3)))
+      return
+    }
+    case 'coins':
+      for (let n = 0; n < 6; n++) {
+        // A burst arcs out from the chest or the slain monster and rains onto the floor.
+        const vx = (n - 2.5) * 1.6
+        const x = Math.round(fx.x + 4 + vx * (0.5 + t * 2))
+        const y = Math.min(GROUND - 1, Math.round(4 - Math.sin(t * Math.PI) * 4 + t * 6))
+        paint(grid, [(frame + n) % 3 === 0 ? 'O' : 'z'], x, y)
+      }
+      return
+    case 'poof': {
+      const r = 1 + t * 3
+      for (let n = 0; n < 8; n++) {
+        if (t > 0.5 && (n + frame) % 2 === 0) continue
+        const a = (n / 8) * Math.PI * 2
+        paint(grid, ['v'], Math.round(fx.x + 2 + Math.cos(a) * r * 1.6), Math.round(GROUND - 3 + Math.sin(a) * r * 0.7))
+      }
+      return
+    }
     case 'warp': {
       // A ring of the server's color spreads from Claude and thins out.
       const r = 1 + t * 6
@@ -709,31 +799,63 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   const grid = Array.from({ length: STAGE_ROWS }, () => Array<string>(cols).fill('.'))
   const def = SCENES[hero.scene % SCENES.length] ?? SCENES[0]
   if (!def) return grid.map(r => r.join(''))
-  grid[GROUND] = Array<string>(cols).fill(def.ground)
-  const wet = extras.weather
-  sky(grid, cols, frame, extras, !!def.sky)
-  if (def.sky && wet === 'clear') paint(grid, def.sky, cols - 8, 0)
+  const dungeon = !!extras.dungeon
+  // Underground there is no weather: context fill burns the lamp oil instead.
+  const wet: Weather = dungeon ? 'clear' : extras.weather
+  const lit: [number, number][] = []
+  if (dungeon) {
+    grid[GROUND] = Array.from({ length: cols }, (_, x) => (x % 7 === 0 ? 'K' : 'F'))
+    const level = extras.lamps ?? 0
+    const spots: number[] = []
+    for (let x = 8 + ((hero.scene * 5) % 9); x < cols - 3; x += 22) spots.push(x)
+    // At the last level only the lamp nearest Claude still burns.
+    const nearest = spots.reduce((a, b) => (Math.abs(b - hero.x - 4) < Math.abs(a - hero.x - 4) ? b : a), spots[0] ?? 0)
+    spots.forEach((x, n) => {
+      const on = level < 2 || (level === 2 ? n % 2 === 0 : x === nearest && frame % 7 !== 0)
+      paint(grid, SCONCE, x, LAMP_TOP + 3)
+      if (!on) paint(grid, LAMP_OUT[Math.floor(frame / 4) % 2] ?? [], x, LAMP_TOP)
+      else if (level === 0) paint(grid, LAMP_FLAME[Math.floor(frame / 3) % 2] ?? [], x, LAMP_TOP)
+      else paint(grid, LAMP_LOW, x, LAMP_TOP)
+      if (on) lit.push([x + 1, level === 0 ? 4 + (frame % 5 === 0 ? 0 : 1) : 3])
+    })
+  } else {
+    grid[GROUND] = Array<string>(cols).fill(def.ground)
+    sky(grid, cols, frame, extras, !!def.sky)
+    if (def.sky && wet === 'clear') paint(grid, def.sky, cols - 8, 0)
+  }
   if (wet !== 'clear') {
     const drift = Math.floor(frame / 6)
     for (let x = 0; x < cols + 20; x += 20) paint(grid, CLOUD, ((x + drift) % (cols + 20)) - 10, 0)
   }
   festive(grid, cols, frame, extras)
   if (extras.fireworks) fireworks(grid, cols, frame)
+  const prop = dungeon ? (DUNGEON_PROPS[hero.scene % DUNGEON_PROPS.length] ?? def.prop) : def.prop
   for (let x = 4 + ((hero.scene * 7) % 11); x < cols - 7; x += 26) {
-    paint(grid, def.prop, x, GROUND - def.prop.length)
+    paint(grid, prop, x, GROUND - prop.length)
   }
 
-  // Todo pellets on the ground, right to left; the done ones are eaten.
+  // Todos on the ground, right to left: pellets in the meadow, treasure chests in the dungeon.
   if (extras.todos && extras.todos.total > 0) {
     const left = extras.todos.total - extras.todos.done
-    for (let n = 0; n < Math.min(left, 12); n++) paint(grid, ['Y'], cols - 3 - n * 3, GROUND - 1)
+    if (dungeon) for (let n = 0; n < Math.min(left, 8); n++) paint(grid, CHEST, cols - 6 - n * 7, GROUND - CHEST.length)
+    else for (let n = 0; n < Math.min(left, 12); n++) paint(grid, ['Y'], cols - 3 - n * 3, GROUND - 1)
   }
 
-  // Bugs from failing tests crawl along the ground.
+  // Failing tests: bugs crawl along the ground, or slimes squish along the dungeon floor.
   for (let n = 0; n < Math.min(extras.bugs, 8); n++) {
     const span = Math.max(1, cols - 6)
-    const x = (n * 37 + Math.floor((frame + n * 5) / 3)) % span
-    paint(grid, BUG[(frame + n) % 2] ?? [], x, GROUND - 2)
+    const x = (n * 37 + Math.floor((frame + n * 5) / (dungeon ? 5 : 3))) % span
+    if (dungeon) paint(grid, SLIME[Math.floor((frame + n * 3) / 3) % 2] ?? [], x, GROUND - 3)
+    else paint(grid, BUG[(frame + n) % 2] ?? [], x, GROUND - 2)
+  }
+
+  // Failed calls in the dungeon: skeletons line up in front of Claude, clubs toward it.
+  if (dungeon && extras.foes) {
+    for (let n = 0; n < Math.min(extras.foes, 3); n++) {
+      const art = SKELETON[Math.floor((frame + n * 2) / 3) % 2] ?? []
+      const ahead = hero.dir > 0 ? Math.round(hero.x) + HERO_W + n * 6 : Math.round(hero.x) - 6 - n * 6
+      paint(grid, hero.dir > 0 ? art.map(r => r.split('').reverse().join('')) : art, ahead, GROUND - art.length)
+    }
   }
 
   const now = extras.now ?? 0
@@ -743,7 +865,7 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   workers.forEach((w, n) => {
     const f = frame + n * 3 // out of step with each other
     const body = w.state === 'failed' || w.sad ? 'e' : TINT[w.tier]
-    const top = critter(grid, w.action, w.x, w.dir, f, body)
+    const top = critter(grid, w.action, w.x, w.dir, f, body, null, 0, !!extras.dungeon)
     if (w.state === 'done' && w.sad) {
       // Claude's paw pats the head of a helper that didn't make it.
       paint(grid, ['ooo'], Math.round(w.x) + 3, Math.max(0, top - 1 - (Math.floor(f / 2) % 2)))
@@ -762,7 +884,7 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   const fall = Math.max(0, Math.round(12 - dropAge / 60))
   // Heart eyes stay put; any other time the eyes may wander.
   const glance = hero.glance && now < (hero.glanceUntil ?? 0) && hero.emote !== 'smitten' ? hero.glance : null
-  const top = critter(grid, hero.action, hero.x, face, frame, extras.shiny ? 'n' : undefined, glance, fall)
+  const top = critter(grid, hero.action, hero.x, face, frame, extras.shiny ? 'n' : undefined, glance, fall, dungeon)
   if (hero.action === 'drop' && fall === 0 && dropAge < 1100) {
     paint(grid, ['w', '.w'], x - 2, GROUND - 2)
     paint(grid, ['.w', 'w'], x + 9, GROUND - 2)
@@ -795,7 +917,7 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
   if (wear && eyes !== undefined) {
     paint(grid, face > 0 ? wear : wear.map(r => r.split('').reverse().join('')), face > 0 ? x : x + HERO_W - BODY_W, top + eyes)
   }
-  if (extras.scarf && eyes !== undefined) scarf(grid, sprite(hero.action, frame), extras.scarf, x, face, top, eyes, frame)
+  if (extras.scarf && eyes !== undefined) scarf(grid, sprite(hero.action, frame, dungeon), extras.scarf, x, face, top, eyes, frame)
   if (extras.tie && eyes !== undefined) onBody(grid, TIE, x, face, top + eyes + 1)
   if (hero.action === 'listen') paint(grid, HEADPHONES, x, top - 2)
   if ((hero.action === 'listen' || hero.action === 'dance') && frame % 12 < 8) {
@@ -837,9 +959,27 @@ export function stage(hero: Hero, workers: readonly Worker[], frame: number, col
       paint(grid, ['j'], x, y, true)
     }
   }
-  if (extras.holiday === 'christmas') snow(grid, cols, frame)
+  if (extras.holiday === 'christmas' && !dungeon) snow(grid, cols, frame)
   if (wet === 'storm' && frame % 40 < 3) paint(grid, BOLT, (frame * 13) % Math.max(1, cols - 2), 2, true)
+  if (dungeon) bricks(grid, lit)
   return grid.map(r => r.join(''))
+}
+
+/** The hallway wall behind everything: bricks in every empty pixel, warm near a burning lamp. */
+function bricks(grid: string[][], lit: readonly [number, number][]) {
+  for (let y = 0; y < GROUND; y++) {
+    const row = grid[y]
+    if (!row) continue
+    const course = Math.floor(y / 3)
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] !== '.') continue
+      const mortar = y % 3 === 2 || (x + (course % 2) * 4) % 8 === 0
+      // Full warmth near the flame, a dithered rim further out.
+      const d = Math.min(...lit.map(([lx, r]) => ((x - lx) / (r * 1.8)) ** 2 + ((y - LAMP_TOP - 1) / r) ** 2), Infinity)
+      const warm = d <= 0.45 || (d <= 1 && (x + y) % 2 === 0)
+      row[x] = warm ? (mortar ? 'J' : 'E') : mortar ? 'K' : 'D'
+    }
+  }
 }
 
 export type Segment = { text: string; color?: string; backgroundColor?: string }
@@ -901,6 +1041,7 @@ const GLYPHS: Record<Action, readonly string[]> = {
   juggle: ['∘°', '°∘'],
   stretch: ['\\o/'],
   hatch: ['◯', '◔', '◑', '◕'],
+  fight: ['⚔', '†'],
 }
 
 export function glyph(action: Action, frame: number): string {

@@ -30,6 +30,8 @@ export type Action =
   | 'juggle'
   | 'stretch'
   | 'hatch'
+  /** Dungeon theme: a sword swing while monsters are on the floor. */
+  | 'fight'
 
 /**
  * A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly;
@@ -38,9 +40,12 @@ export type Action =
 export type Emote = 'think' | 'blush' | 'sweat' | 'butterfly' | 'smitten' | 'sheepish'
 
 /** Timed effects that cross or burst over the stage. */
-export type FxKind = 'confetti' | 'plane' | 'boxes' | 'train' | 'whale' | 'ufo' | 'warp'
+export type FxKind = 'confetti' | 'plane' | 'boxes' | 'train' | 'whale' | 'ufo' | 'warp' | 'coin' | 'coins' | 'poof'
 /** color: a palette key, for effects tinted per source (an MCP server's warp). */
 export type Fx = { id: number; kind: FxKind; start: number; dur: number; x: number; color?: string }
+
+/** The stage: the meadow with its weather, or a lamplit dungeon hallway. */
+export type Theme = 'meadow' | 'dungeon'
 
 export type Holiday = 'halloween' | 'christmas' | 'newyear' | 'valentine' | 'aprilfools'
 export type Hat =
@@ -125,6 +130,9 @@ declare module 'claude-code' {
       shiny: boolean | null
       /** Clean main-loop tool calls in a row this turn. */
       combo: number
+      /** Dungeon theme: gold coins earned this session. */
+      gold: number
+      theme: Theme
     }
   }
 }

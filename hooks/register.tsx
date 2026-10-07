@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Action, Emote, Face, Form, Fx, FxKind, Hat, Hero, Holiday, Limit, Stats, Theme, Worker } from '../types'
-import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lampsOf, lines, speed, stage, tierOf, weatherOf } from './art'
+import { CONGA_AT, HERO_W, SCENE_COUNT, TIER_COLOR, glyph, lampsOf, transition, lines, speed, stage, tierOf, weatherOf } from './art'
 import type { Egg } from './story'
 import {
   COMBO_AT,
@@ -64,6 +64,7 @@ const theme = atom({ plugin: 'clawd-tales', key: 'theme' } as const, 'meadow' as
 
 const TICK_MS = 200
 const CALM_TICK_MS = 1000 // calm mode: one beat a second
+const CLIP_STEP_MS = TICK_MS // each in-between pose holds for one beat
 const POLL_EVERY = 5 // ticks between $.agent.list() checks
 const THINK_AFTER_MS = 15000 // a helper with no tool call for this long wanders again
 const TRIP_MS = 2500
@@ -584,6 +585,22 @@ function runDemo($: EngineInterface) {
   at(40000, () => update($, todos, () => null)) // the fable's quest list leaves with it
 }
 
+// The pose last drawn, and the in-between poses still to play before the new one shows.
+let drawnAction: Action | undefined
+let clip: { steps: readonly Action[]; at: number } | null = null
+
+export async function between($: Pick<EngineInterface, 'clock'>, action: Action): Promise<Action> {
+  const now = await $.clock.now()
+  if (action !== drawnAction) {
+    const steps = drawnAction && !isCalm ? transition(drawnAction, action) : []
+    clip = steps.length > 0 ? { steps, at: now } : null
+    drawnAction = action
+  }
+  const step = clip?.steps[Math.floor((now - clip.at) / CLIP_STEP_MS)]
+  if (!step) clip = null
+  return step ?? action
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'tales', description: 'Clawd tales: on, off, calm, lively, demo, theme, hat, face, scarf' })
@@ -931,6 +948,7 @@ export const register: Register = on => {
       const nervous = waited * 1000 >= NERVOUS_MS
       shown = { ...shown, action: 'alert', caption: nervous ? `${asking} (waiting ${waited}s)` : asking, emote: nervous ? 'sweat' : shown.emote }
     }
+    shown = { ...shown, action: await between($, shown.action) }
     const fit = (s: string, room: number) => (s.length > room ? s.slice(0, Math.max(1, room - 1)) + '…' : s)
     const caption = asking ? (
       <Text color="#e5534b" bold>

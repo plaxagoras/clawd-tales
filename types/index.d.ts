@@ -34,6 +34,9 @@ export type Action =
   | 'fight'
   /** Dungeon theme: a wand raised for a shell command. */
   | 'cast'
+  /** In-between poses, drawn for a beat when the posture changes (art.ts transition). */
+  | 'crouch'
+  | 'drowsy'
 
 /**
  * A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly;

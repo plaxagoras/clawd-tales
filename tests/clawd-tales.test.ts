@@ -1,7 +1,8 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { HERO_W, STAGE_ROWS, glyph, lampsOf, lines, mirror, sprite, stage, tierOf, weatherOf } from '../hooks/art'
+import { between } from '../hooks/register'
+import { HERO_W, STAGE_ROWS, glyph, lampsOf, lines, mirror, sprite, stage, tierOf, transition, weatherOf } from '../hooks/art'
 import {
   ambushCaption,
   bashEggs,
@@ -44,7 +45,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch', 'fight', 'cast'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch', 'fight', 'cast', 'crouch', 'drowsy'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -678,3 +679,38 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect((await run('meadow')).text).toMatch(/meadow/)
   })
 }
+
+test('posture changes play an in-between pose, and a trip stays instant', () => {
+  expect(transition('walk', 'sit')).toEqual(['crouch'])
+  expect(transition('sit', 'read')).toEqual(['crouch'])
+  expect(transition('fly', 'walk')).toEqual(['crouch'])
+  expect(transition('yawn', 'sleep')).toEqual(['drowsy'])
+  expect(transition('sleep', 'stretch')).toEqual(['drowsy', 'crouch'])
+  expect(transition('sleep', 'sit')).toEqual(['drowsy'])
+  expect(transition('walk', 'trip')).toEqual([])
+  expect(transition('trip', 'walk')).toEqual(['crouch'])
+  expect(transition('walk', 'dig')).toEqual([])
+  expect(transition('sit', 'wave')).toEqual([])
+  expect(transition('hatch', 'cheer')).toEqual([])
+  expect(transition('crouch', 'sit')).toEqual([])
+})
+
+test('the in-between pose holds one beat, then the new pose shows', async () => {
+  let t = 0
+  const $ = { clock: { now: async () => t } } as never
+  expect(await between($, 'walk')).toBe('walk') // the first pose drawn has nothing to blend from
+  expect(await between($, 'sit')).toBe('crouch')
+  t = 150
+  expect(await between($, 'sit')).toBe('crouch')
+  t = 200
+  expect(await between($, 'sit')).toBe('sit')
+  expect(await between($, 'sleep')).toBe('drowsy')
+  t = 400
+  expect(await between($, 'sleep')).toBe('sleep')
+  expect(await between($, 'stretch')).toBe('drowsy')
+  t = 600
+  expect(await between($, 'stretch')).toBe('crouch')
+  t = 800
+  expect(await between($, 'stretch')).toBe('stretch')
+  expect(await between($, 'trip')).toBe('trip')
+})

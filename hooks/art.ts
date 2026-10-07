@@ -199,6 +199,33 @@ const SCROLL: Sprite[] = [
   ['.ooooooo.sss', '.ooooooo.BkB', 'oooooooooBBB', '.ooooooo.sss', LEGS_A], // blink
 ]
 
+/** In-between poses: knees bent on the way down to a seat or up from it, eyes drooping before sleep. */
+const CROUCH: Sprite = [HEAD, EYES, ARMS_EYES, LEGS_A]
+const DROWSY: Sprite = [HEAD, '.kkoookk.', ARMS, HEAD]
+
+type Posture = 'stand' | 'sit' | 'lie' | 'air' | 'egg'
+const SEATED = new Set<Action>(['sit', 'yawn', 'wave', 'scratch', 'look', 'wink', 'fish', 'reel', 'listen', 'juggle', 'drowsy'])
+
+function posture(action: Action): Posture {
+  if (SEATED.has(action)) return 'sit'
+  if (action === 'sleep' || action === 'trip') return 'lie'
+  if (action === 'fly') return 'air'
+  if (action === 'hatch') return 'egg'
+  return 'stand'
+}
+
+/**
+ * The in-between poses played, one beat each, when Clawd's posture changes, so it doesn't pop
+ * from standing to seated or from the air to the ground. A trip stays instant: the fall is the joke.
+ */
+export function transition(from: Action, to: Action): readonly Action[] {
+  const a = posture(from), b = posture(to)
+  if (a === b || a === 'egg' || b === 'egg' || to === 'trip' || from === 'crouch' || from === 'drowsy') return []
+  if (b === 'lie') return ['drowsy']
+  if (from === 'sleep') return b === 'sit' ? ['drowsy'] : ['drowsy', 'crouch']
+  return ['crouch']
+}
+
 const UMBRELLA: Sprite = ['..UUUUU..', '.UUUUUUU.', 'U...s...U']
 const HEART: Sprite = ['q.q', '.q.']
 const ZED: Sprite = ['ww', '.w', 'ww']
@@ -289,6 +316,10 @@ export function sprite(action: Action, frame: number, dungeon = false): Sprite {
       return STRETCH[Math.floor(frame / 5) % 2] ?? STAND
     case 'hatch':
       return EGG[Math.floor(frame / 2) % EGG.length] ?? STAND
+    case 'crouch':
+      return CROUCH
+    case 'drowsy':
+      return DROWSY
     default:
       return Math.floor(frame / 2) % 2 ? STRIDE : STAND
   }
@@ -479,7 +510,7 @@ const FACES: Record<Face, Sprite> = {
 /** Which sprite row the eyes are on, per pose; poses without a usable face are left out. */
 const EYE_ROW: Partial<Record<Action, number>> = {
   walk: 1, run: 1, read: 1, dig: 1, sneak: 1, sit: 1, wave: 1, scratch: 1, look: 1, wink: 1, fish: 1,
-  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2, fight: 1, cast: 1,
+  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2, fight: 1, cast: 1, crouch: 1, drowsy: 1,
 }
 /** Three or more helpers out: Claude is the boss, collar and tie under the eyes. */
 const TIE: Sprite = ['...WrW...', '....r....']
@@ -1021,6 +1052,8 @@ const GLYPHS: Record<Action, readonly string[]> = {
   run: ['⠁', '⠂', '⠄', '⡀', '⢀', '⠠', '⠐', '⠈'],
   sneak: ['∙∙∙', '●∙∙', '∙●∙', '∙∙●'],
   read: ['▤'],
+  crouch: ['▃'],
+  drowsy: ['◡'],
   dig: ['▖', '▘', '▝', '▗'],
   fly: ['◜', '◝', '◞', '◟'],
   carry: ['▰▱▱', '▰▰▱', '▰▰▰'],

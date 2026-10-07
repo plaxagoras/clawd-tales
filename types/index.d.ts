@@ -32,6 +32,8 @@ export type Action =
   | 'hatch'
   /** Dungeon theme: a sword swing while monsters are on the floor. */
   | 'fight'
+  /** Dungeon theme: a wand raised for a shell command. */
+  | 'cast'
 
 /**
  * A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly;

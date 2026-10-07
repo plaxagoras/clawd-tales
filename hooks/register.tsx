@@ -543,7 +543,7 @@ function runDemo($: EngineInterface) {
   }
   at(2000, () => onTodos($, { todos: [1, 2, 3, 4, 5].map(n => ({ content: `Task ${n}`, status: n === 1 ? 'in_progress' : 'pending' })) }))
   at(3000, () => update($, context, () => 74)) // rain
-  at(11000, () => heroBeat($, { action: 'run', caption: isDungeon ? 'Claude dashes down the hall to run the test suite' : 'Claude runs off to run the test suite' }))
+  at(11000, () => heroBeat($, isDungeon ? { action: 'cast', caption: 'Claude casts a spell: run the test suite' } : { action: 'run', caption: 'Claude runs off to run the test suite' }))
   // The dungeon cut: with slimes on the floor, the next edit is a sword fight.
   at(13500, async () => {
     if (isDungeon) await heroBeat($, await themed($, 'Edit', { file_path: '/src/hooks/story.ts' }, 'demo13500'))

@@ -188,6 +188,11 @@ const FIGHT: Sprite[] = [
   ['.ooooooo.m', '.okoooko.m', 'ookoookoos', HEAD, LEGS_A],
   [HEAD, EYES, 'ookoookoosmmm', HEAD, LEGS_B],
 ]
+/** Dungeon: a wand raised for a shell command, the star at its tip twinkling. */
+const CAST: Sprite[] = [
+  ['.ooooooo...z', '.okoooko..s.', 'ookoookoos..', HEAD, LEGS_A],
+  ['.ooooooo.A.A', '.okoooko..sz', 'ookoookoos.A', HEAD, LEGS_A],
+]
 /** Dungeon: Claude pulls out a scroll instead of a book. */
 const SCROLL: Sprite[] = [
   ['.ooooooo.sss', '.okoooko.BkB', 'ookoookooBBB', '.ooooooo.sss', LEGS_A],
@@ -222,6 +227,8 @@ export function sprite(action: Action, frame: number, dungeon = false): Sprite {
   switch (action) {
     case 'read':
       return (dungeon ? SCROLL : READ)[frame % 12 === 0 ? 1 : 0] ?? STAND
+    case 'cast':
+      return CAST[Math.floor(frame / 2) % 2] ?? STAND
     case 'fight':
       return FIGHT[Math.floor(frame / 2) % 2] ?? STAND
     case 'dig':
@@ -472,7 +479,7 @@ const FACES: Record<Face, Sprite> = {
 /** Which sprite row the eyes are on, per pose; poses without a usable face are left out. */
 const EYE_ROW: Partial<Record<Action, number>> = {
   walk: 1, run: 1, read: 1, dig: 1, sneak: 1, sit: 1, wave: 1, scratch: 1, look: 1, wink: 1, fish: 1,
-  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2, fight: 1,
+  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2, fight: 1, cast: 1,
 }
 /** Three or more helpers out: Claude is the boss, collar and tie under the eyes. */
 const TIE: Sprite = ['...WrW...', '....r....']
@@ -1042,6 +1049,7 @@ const GLYPHS: Record<Action, readonly string[]> = {
   stretch: ['\\o/'],
   hatch: ['◯', '◔', '◑', '◕'],
   fight: ['⚔', '†'],
+  cast: ['✦', '✧'],
 }
 
 export function glyph(action: Action, frame: number): string {

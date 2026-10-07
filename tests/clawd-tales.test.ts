@@ -44,7 +44,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch', 'fight'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch', 'fight', 'cast'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -281,6 +281,11 @@ test('dungeon captions: scrolls, runes, a fight while monsters are out, ambushes
   expect(dungeonBeat('Edit', { file_path: '/a/art.ts' }, 's').action).toBe('dig')
   expect(dungeonBeat('Edit', { file_path: '/a/art.ts' }, 's', 3).action).toBe('fight')
   expect(dungeonBeat('Bash', { description: 'Run tests' }, 's', 1).action).toBe('fight')
+  // A spell caption gets the wand, a dash gets the run: pose and words agree.
+  for (const seed of ['a', 'b', 'c', 'd', 'e', 'f']) {
+    const b = dungeonBeat('Bash', { description: 'Run tests' }, seed)
+    expect(b.action).toBe(b.caption.includes('spell') ? 'cast' : 'run')
+  }
   expect(dungeonBeat('Grep', { pattern: 'foo' }, 's').caption).toMatch(/dark halls.*foo/)
   expect(dungeonBeat('TodoWrite', {}, 's').caption).toMatch(/treasure map/)
   expect(dungeonBeat('mcp__claude_ai_Gmail__search_threads', {}, 's').caption).toMatch(/Gmail/)

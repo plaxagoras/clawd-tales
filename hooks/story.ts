@@ -105,7 +105,8 @@ export function dungeonBeat(tool: string, args: Args, seed: string, foes = 0): B
       return { action: 'sneak', caption: `Claude searches the dark halls for “${clip(str(args, 'pattern'), 40)}”` }
     case 'Bash': {
       const what = clip(str(args, 'description') || str(args, 'command'), 60)
-      return fight(`the ${lower(what)}`) ?? { action: 'run', caption: pick([`Claude casts a spell: ${lower(what)}`, `Claude dashes down the hall to ${lower(what)}`], seed) }
+      const spell = pick(['cast', 'dash'], seed) === 'cast'
+      return fight(`the ${lower(what)}`) ?? (spell ? { action: 'cast', caption: `Claude casts a spell: ${lower(what)}` } : { action: 'run', caption: `Claude dashes down the hall to ${lower(what)}` })
     }
     case 'WebFetch':
       return { action: 'fly', caption: `Claude sends a raven to ${host(str(args, 'url'))}` }
@@ -199,6 +200,7 @@ const FORM_OF: Partial<Record<Action, Form>> = {
   sneak: 'detective',
   dig: 'builder',
   run: 'hacker',
+  cast: 'hacker',
   fly: 'explorer',
   carry: 'captain',
 }

@@ -555,6 +555,12 @@ function runDemo($: EngineInterface) {
     if (isDungeon) await heroBeat($, await themed($, 'Edit', { file_path: '/src/hooks/story.ts' }, 'demo13500'))
   })
   at(12000, () => onTests($, 'npm test', 'Tests: 3 failed, 9 passed', true))
+  // 0.6.0 moments: a model switch hat, then a memory note.
+  at(5200, async () => {
+    modelHat = { hat: 'regal', until: (await $.clock.now()) + MODEL_HAT_MS }
+    await heroBeat($, { action: 'cheer', caption: 'Claude changes into Opus' }, 0)
+  })
+  at(22300, async () => heroBeat($, await themed($, 'Write', { file_path: '/home/you/.claude/memory/MEMORY.md' }, 'demo22300')))
   at(17500, () => update($, alert, () => 'Claude needs you: allow Bash(rm -rf build)?'))
   at(21000, () => update($, alert, () => null))
   at(21500, () => onTests($, 'npm test', 'Tests: 0 failed, 12 passed', true))

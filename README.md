@@ -6,7 +6,7 @@ A pixel Clawd that acts out what Claude Code is doing, in a band above your prom
 
 ![clawd-tales demo](assets/demo.gif)
 
-*The 45-second `/tales demo`: Clawd hatches, helpers walk in, tests fail and bugs drop, Claude calls for you, a storm rolls in, and Clawd grows up.*
+*The 45-second `/tales demo` in the dungeon: Clawd hatches and changes into Opus, helpers walk in, slimes get loose and Clawd fights them, Claude calls for you, a note goes up on the wall, and Clawd grows up.*
 
 Glance down and you know what Claude is doing. A red `!` and a jumping Clawd means it is waiting on you. Rain means the context is nearly full.
 
@@ -98,7 +98,7 @@ claude --plugin-dir ./clawd-tales
 
 | Command | What it does |
 |---|---|
-| `/tales demo` | Plays a short story: a hatching, helpers, bugs, pellets, weather, a permission call and growing up. Your own Clawd's progress isn't touched |
+| `/tales demo` | Plays a short story: a hatching, a model switch, helpers, bugs, pellets, weather, a permission call, a memory note and growing up. Your own Clawd's progress isn't touched |
 | `/tales theme dungeon` / `meadow` | Swaps the meadow for a lamplit dungeon hallway (`/tales dungeon` works too). Saved between sessions |
 | `/tales calm` | One frame a second, and nobody wanders between tool calls |
 | `/tales lively` | Back to 5 frames a second (the default) |

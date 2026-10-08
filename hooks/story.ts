@@ -3,6 +3,7 @@
  * No model calls: Claude Fables asks Sonnet every few seconds; this reads the call itself.
  */
 import type { Action, Emote, Form, Hat, Holiday, Stats } from '../types'
+import { tierOf } from './art'
 
 export type Beat = { action: Action; caption: string }
 
@@ -34,8 +35,25 @@ function pick(lines: readonly string[], seed: string): string {
   return lines[Math.abs(h) % lines.length] ?? lines[0] ?? ''
 }
 
+/** Auto memory and memory vaults: a MEMORY.md, or anything under a memory/ or claude-memory/ folder. */
+export function isMemoryPath(path: string): boolean {
+  return /(^|\/)(claude-)?memory\//i.test(path) || base(path) === 'MEMORY.md'
+}
+
+/** A write to a memory file is a note pinned up, in either theme. */
+function memoryBeat(tool: string, args: Args, seed: string, dungeon: boolean): Beat | null {
+  const path = str(args, 'file_path')
+  if ((tool !== 'Write' && tool !== 'Edit') || !isMemoryPath(path)) return null
+  const file = base(path)
+  return dungeon
+    ? { action: 'pin', caption: pick([`Claude nails a note to the dungeon wall: ${file}`, `Claude scratches ${file} into the wall to remember`], seed) }
+    : { action: 'pin', caption: pick([`Claude pins a note to memory: ${file}`, `Claude jots down ${file} so it won't forget`], seed) }
+}
+
 export function beat(tool: string, args: Args, seed: string): Beat {
   const file = base(str(args, 'file_path') || str(args, 'notebook_path') || str(args, 'path'))
+  const memo = memoryBeat(tool, args, seed, false)
+  if (memo) return memo
   switch (tool) {
     case 'Read':
       return {
@@ -90,6 +108,8 @@ export function beat(tool: string, args: Args, seed: string): Beat {
  */
 export function dungeonBeat(tool: string, args: Args, seed: string, foes = 0): Beat {
   const file = base(str(args, 'file_path') || str(args, 'notebook_path') || str(args, 'path'))
+  const memo = memoryBeat(tool, args, seed, true)
+  if (memo) return memo
   const fight = (what: string): Beat | null =>
     foes > 0 ? { action: 'fight', caption: pick([`Claude battles the monster${foes === 1 ? '' : 's'} in ${what}`, `Claude swings at the bugs in ${what}`], seed) } : null
   switch (tool) {
@@ -151,6 +171,21 @@ export function ending(steps: number, seconds: number, isAborted: boolean, best 
   const s = steps === 1 ? 'step' : 'steps'
   const tokens = milestone ? ` · ${Math.round(milestone / 1000)}K tokens!` : ''
   return `The end · ${steps} ${s} · ${seconds}s${best >= CROWN_AT ? ` · crown ×${best}` : ''}${tokens}`
+}
+
+/** The turn died on an API error (overloaded, offline, out of retries): Claude waits under the cloud. */
+export function stuckCaption(dungeon: boolean): string {
+  return dungeon ? 'The portal fizzles out. Claude waits for it to light again.' : 'The cloud stopped answering. Claude waits out the storm.'
+}
+
+const MODEL_HAT: Record<ReturnType<typeof tierOf>, Hat | null> = { haiku: 'sprout', sonnet: 'beret', opus: 'regal', fable: 'crown', other: null }
+
+/** A new model between turns: Claude tries on its hat. Null when nothing changed or there was no model before. */
+export function modelSwitch(before: string | null, after: string): { hat: Hat | null; caption: string } | null {
+  if (!before || !after || before === after) return null
+  const tier = tierOf(after)
+  const name = tier === 'other' ? after : tier.charAt(0).toUpperCase() + tier.slice(1)
+  return { hat: MODEL_HAT[tier], caption: `Claude changes into ${name}` }
 }
 
 /** The closing pose by turn length: a nod for a quick one, a hop, a dance, then a flag at the summit. */

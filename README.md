@@ -41,6 +41,9 @@ You ask Claude to fix a failing test. Clawd runs off to `pytest` and three bugs 
 | Two errors in a row | Clawd goes cross-eyed with stars circling. A third flips the table |
 | You approve a permission prompt quickly | Hearts. Leave one waiting past 30 seconds and Clawd starts to sweat, with a timer in the caption |
 | The conversation is compacted | Clawd sweeps the stage with a broom and the weather clears |
+| Claude writes to a memory file (a `MEMORY.md`, or anything in a `memory/` folder) | Clawd holds up a sticky note and pins it to the wall |
+| You switch models between turns | Clawd hops in the new model's hat for a few seconds: a sprout for Haiku, a beret for Sonnet, a purple crown for Opus, a gold one for Fable |
+| A turn dies on an API error | Clawd ends it next to a sparking grey cloud, sweating |
 | A session starts | Clawd drops in from the sky. A resumed session gets a wave hello. The first new session after you install hatches Clawd from an egg, and progress starts counting from there |
 | 200 tool calls | The hatchling loses its eggshell cap and grows up into whatever work it did most: a scholar (reading), a detective (searching), a builder (editing), a hacker (commands), an explorer (the web) or a captain (helpers). Each wears its own hat, and the form can change as your habits do |
 
@@ -52,6 +55,7 @@ You ask Claude to fix a failing test. Clawd runs off to `pytest` and three bugs 
 - A command that isn't found sends the `sl` train across the stage.
 - While it waits for you, Clawd waves, winks, scratches its head, looks around and watches a butterfly. A longer wait and it goes fishing. Asleep, it dreams about the last thing it did.
 - Clawd glances left and right now and then, and looks over when a helper walks in. Sitting, it breathes.
+- Clawd never pops from standing to sitting. It crouches on the way down and gets drowsy before it lies down. `/tales calm` skips these.
 - The sky follows your clock: sun by day, stars at night. Between 1 and 5 am, Clawd wears a nightcap and keeps a mug of coffee nearby.
 - Halloween, Christmas, New Year's, Valentine's Day and April 1st each get a costume or something extra.
 - Now and then a whale, a UFO or the train passes through. One session in a hundred brings a shiny Clawd.
@@ -64,6 +68,7 @@ Under the caption, a status line shows `ctx 74% · 5h 22% · 7d 23%`, plus the t
 
 - The lamps are your context. As it fills they burn low, then half of them go out, and near the end only the lamp next to Clawd still flickers. Compaction refills them.
 - Reading a file pulls out a scroll instead of a book.
+- Some shell commands are spells: Clawd raises a wand with a twinkling star.
 - Your todo list is a row of treasure chests. Finishing a task opens one and coins spill out.
 - Every clean tool call pops a gold coin over Clawd's head, and the status line keeps the count.
 - A failing test run lets slimes loose on the floor. Until the tests pass, every edit or command is a sword fight. A green run squashes them for gold.

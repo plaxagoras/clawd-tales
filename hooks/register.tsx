@@ -30,6 +30,7 @@ import {
   holidayOf,
   isLate,
   isMidnightNewYear,
+  modelSwitch,
   moodOf,
   notFound,
   readStats,
@@ -37,6 +38,7 @@ import {
   scarfColor,
   skyOf,
   startCaption,
+  stuckCaption,
   testCounts,
   tokenMilestone,
   tripCaption,
@@ -96,6 +98,9 @@ let alertAt: number | null = null // when the current call for the user began
 let errStreak = 0 // main-loop errors in a row
 let nextGlanceAt = 0
 let planMode = false // the last prompt went in under plan mode: the wizard hat
+let lastModel: string | null = null // the session's model at the last turn start
+let modelHat: { hat: Hat; until: number } | null = null // tried on after a model switch
+const MODEL_HAT_MS = 8000
 let agentCalls = 0 // main-loop Agent calls still running: Claude is waiting on helpers
 let sessionTokens = 0 // input, cache writes and output this session; cache reads left out
 let tokensSeen = 0 // the count at the last main-loop ending, so a helper's crossing waits for it
@@ -615,6 +620,11 @@ export const register: Register = on => {
     isDungeon = (await $.store.get('theme')) === 'dungeon'
     await update($, theme, () => (isDungeon ? 'dungeon' : 'meadow'))
     try {
+      lastModel = await $.session.model()
+    } catch {
+      lastModel = null
+    }
+    try {
       scarfKey = scarfColor(await $.session.root())
     } catch {
       scarfKey = null
@@ -727,6 +737,19 @@ export const register: Register = on => {
   // prompt.submit: without this Claude kept fishing and dozing through the whole turn.
   on('turn.start', async ($, e, next) => {
     if ((await read($, hero)).mode !== 'working') await begin($, e.text)
+    // A /model switch since the last turn: Claude hops in the new model's hat.
+    let model: string | null = null
+    try {
+      model = await $.session.model()
+    } catch {
+      // No model to read: nothing to compare.
+    }
+    const swap = model ? modelSwitch(lastModel, model) : null
+    if (model) lastModel = model
+    if (swap) {
+      if (swap.hat) modelHat = { hat: swap.hat, until: (await $.clock.now()) + MODEL_HAT_MS }
+      await heroBeat($, { action: 'cheer', caption: swap.caption }, 0)
+    }
     return next(e)
   })
 
@@ -907,7 +930,9 @@ export const register: Register = on => {
     // A helper's turn ends inside the main one: it counts toward tokens, not toward the ending.
     if (e.agentId) return next(e)
     const cur = await read($, hero)
-    if (cur.mode === 'working') {
+    if (cur.mode === 'working' && e.reason === 'error') {
+      await close($, stuckCaption(isDungeon), 'stuck')
+    } else if (cur.mode === 'working') {
       const seconds = Math.round((e.durationMs ?? (await $.clock.now()) - startedAt) / 1000)
       const crossed = tokenMilestone(tokensSeen, sessionTokens)
       tokensSeen = sessionTokens
@@ -988,7 +1013,8 @@ export const register: Register = on => {
     const hat: Hat | null =
       streak >= CROWN_AT
         ? 'crown'
-        : (wornHat ??
+        : ((modelHat && now < modelHat.until ? modelHat.hat : null) ??
+          wornHat ??
           (planMode ? 'wizard' : null) ??
           holidayHat ??
           (longHaul ? 'hardhat' : null) ??

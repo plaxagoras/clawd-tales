@@ -37,6 +37,10 @@ export type Action =
   /** In-between poses, drawn for a beat when the posture changes (art.ts transition). */
   | 'crouch'
   | 'drowsy'
+  /** A note pinned up: a write to a memory file. */
+  | 'pin'
+  /** Under a sparking cloud, sweating: the turn died on an API error. */
+  | 'stuck'
 
 /**
  * A small overlay on Claude: thought bubble, blush, sweat drop, a visiting butterfly;
@@ -68,6 +72,10 @@ export type Hat =
   | 'deerstalker'
   | 'beanie'
   | 'pith'
+  /** Worn for a few seconds after a model switch: Haiku's sprout, Sonnet's beret, Opus's purple crown (Fable keeps the gold one). */
+  | 'sprout'
+  | 'beret'
+  | 'regal'
 /** What Clawd grows into after GROW_AT tool calls, from the work it does most. */
 export type Form = 'scholar' | 'detective' | 'builder' | 'hacker' | 'explorer' | 'captain'
 /** Lifetime progress, saved in $.store: tool calls in all, per form, and the form it grew into. */

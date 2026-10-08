@@ -27,6 +27,9 @@ import {
   countCall,
   formOf,
   growCaption,
+  isMemoryPath,
+  modelSwitch,
+  stuckCaption,
   readStats,
   GROW_AT,
   NEW_STATS,
@@ -45,7 +48,7 @@ const PROPS = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 100
 const BAND = { plugin: 'clawd-tales', component: 'AbovePrompt', props: PROPS } as const
 
 const HERO = { mode: 'working', action: 'walk', caption: '', x: 10, dir: 1, scene: 0, steps: 0, since: 0 } as const
-const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch', 'fight', 'cast', 'crouch', 'drowsy'] as const
+const ACTIONS = ['walk', 'run', 'sneak', 'read', 'dig', 'fly', 'carry', 'trip', 'cheer', 'alert', 'sit', 'yawn', 'sleep', 'wave', 'scratch', 'look', 'cover', 'wink', 'fish', 'reel', 'dizzy', 'flip', 'sweep', 'drop', 'nod', 'dance', 'flag', 'listen', 'juggle', 'stretch', 'hatch', 'fight', 'cast', 'crouch', 'drowsy', 'pin', 'stuck'] as const
 
 test('each tool call becomes an action and a caption', () => {
   expect(beat('Read', { file_path: '/a/b/art.ts' }, 's').action).toBe('read')
@@ -713,4 +716,59 @@ test('the in-between pose holds one beat, then the new pose shows', async () => 
   t = 800
   expect(await between($, 'stretch')).toBe('stretch')
   expect(await between($, 'trip')).toBe('trip')
+})
+
+test('a memory write pins a note, in both themes', () => {
+  expect(isMemoryPath('/home/me/claude-memory/foo.md')).toBe(true)
+  expect(isMemoryPath('/home/me/.claude/projects/x/memory/notes.md')).toBe(true)
+  expect(isMemoryPath('/repo/MEMORY.md')).toBe(true)
+  expect(isMemoryPath('/repo/src/memory.ts')).toBe(false)
+  const meadow = beat('Write', { file_path: '/home/me/claude-memory/foo.md' }, 's')
+  expect(meadow.action).toBe('pin')
+  expect(meadow.caption).toMatch(/foo\.md/)
+  // A memory write is a note even with monsters on the floor.
+  expect(dungeonBeat('Edit', { file_path: '/home/me/claude-memory/foo.md' }, 's', 2).action).toBe('pin')
+  expect(beat('Read', { file_path: '/home/me/claude-memory/foo.md' }, 's').action).toBe('read')
+})
+
+test('a model switch tries on the new hat; an API error ends under the cloud', () => {
+  expect(modelSwitch(null, 'claude-opus-5-5')).toBe(null)
+  expect(modelSwitch('claude-opus-5-5', 'claude-opus-5-5')).toBe(null)
+  expect(modelSwitch('claude-opus-5-5', 'claude-haiku-5-5')).toEqual({ hat: 'sprout', caption: 'Claude changes into Haiku' })
+  expect(modelSwitch('claude-haiku-5-5', 'claude-sonnet-5-5')?.hat).toBe('beret')
+  expect(modelSwitch('claude-sonnet-5-5', 'claude-opus-5-5')?.hat).toBe('regal')
+  expect(modelSwitch('claude-opus-5-5', 'claude-fable-5-1')?.hat).toBe('crown')
+  expect(modelSwitch('claude-opus-5-5', 'gpt-x')).toEqual({ hat: null, caption: 'Claude changes into gpt-x' })
+  for (const hat of ['sprout', 'beret', 'regal'] as const) {
+    const rows = stage({ ...HERO }, [], 0, 60, { weather: 'clear', bugs: 0, todos: null, hat })
+    expect(rows.join('').includes(hat === 'sprout' ? 'h' : hat === 'beret' ? 't' : 'p')).toBe(true)
+  }
+  const stuck = stage({ ...HERO, action: 'stuck' }, [], 0, 60).join('')
+  expect(stuck.includes('v')).toBe(true) // the cloud
+  expect(stuck.includes('j')).toBe(true) // the sweat drop
+  expect(stuckCaption(false)).toMatch(/storm/)
+  expect(stuckCaption(true)).toMatch(/portal/)
+})
+
+test('a /model switch between turns plays the hat beat, and an API error ends stuck', async ($, on) => {
+  world(on)
+  let model = 'claude-opus-5-5'
+  on('session.model', () => ({ value: model }) as never)
+  on('prompt.submit', (_, e) => e as never)
+  on('turn.start', (_, e) => e as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const see = async (text: RegExp) => {
+    const band = await $.ui.mount({ ...BAND, props: PROPS, surface: 'terminal' })
+    const found = await band.find({ type: 'Text', text })
+    await band.unmount()
+    return found
+  }
+  await $.turn.start({ text: 'go', turnId: 't1' } as never)
+  expect(await see(/changes into/)).toBe(undefined)
+  model = 'claude-haiku-5-5'
+  await $.turn.start({ text: 'again', turnId: 't2' } as never)
+  expect(await see(/Claude changes into Haiku/)).toBeDefined()
+  await $.turn.complete({ answer: '', durationMs: 5000, isAborted: false, turnId: 't2', reason: 'error' } as never)
+  expect(await see(/waits out the storm/)).toBeDefined()
 })

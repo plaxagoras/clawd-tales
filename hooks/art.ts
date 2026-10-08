@@ -199,6 +199,17 @@ const SCROLL: Sprite[] = [
   ['.ooooooo.sss', '.ooooooo.BkB', 'oooooooooBBB', '.ooooooo.sss', LEGS_A], // blink
 ]
 
+/** A sticky note held up, then pressed to the wall with a red pin: a memory write. */
+const PIN: Sprite[] = [
+  [HEAD, EYES, 'ookoookooYY', '.ooooooo.YY', LEGS_A],
+  ['.oooooooorY', '.ookoookoYY', 'oookoook.', HEAD, LEGS_A],
+]
+/** Eyes on a grey cloud that sparks, a sweat drop running down: the API gave out. */
+const STUCK: Sprite[] = [
+  ['jooooooo..vv.', '.ookoook.vvvv', 'oookoooko..l.', HEAD, LEGS_A],
+  ['.ooooooo..vv.', 'jookoook.vrvv', 'oookoooko....', HEAD, LEGS_A],
+]
+
 /** In-between poses: knees bent on the way down to a seat or up from it, eyes drooping before sleep. */
 const CROUCH: Sprite = [HEAD, EYES, ARMS_EYES, LEGS_A]
 const DROWSY: Sprite = [HEAD, '.kkoookk.', ARMS, HEAD]
@@ -316,6 +327,10 @@ export function sprite(action: Action, frame: number, dungeon = false): Sprite {
       return STRETCH[Math.floor(frame / 5) % 2] ?? STAND
     case 'hatch':
       return EGG[Math.floor(frame / 2) % EGG.length] ?? STAND
+    case 'pin':
+      return PIN[Math.floor(frame / 3) % 2] ?? STAND
+    case 'stuck':
+      return STUCK[Math.floor(frame / 3) % 2] ?? STAND
     case 'crouch':
       return CROUCH
     case 'drowsy':
@@ -499,6 +514,9 @@ const HATS: Record<Hat, Sprite> = {
   deerstalker: ['...TTT...', '.TTsTsTT.', 'TTTTTTTTT'],
   beanie: ['....W....', '..ggggg..', '.gGgGgGg.'],
   pith: ['..SSSSS..', '.SSSSSSS.', 'SSSSSSSSS'],
+  sprout: ['...h.h...', '....h....'],
+  beret: ['.....t...', '..ttttt..', '.ttttttt.'],
+  regal: ['.p.p.p.p.', '.ppppppp.'],
 }
 
 /** Face accessories, drawn from the eye row down. */
@@ -510,7 +528,7 @@ const FACES: Record<Face, Sprite> = {
 /** Which sprite row the eyes are on, per pose; poses without a usable face are left out. */
 const EYE_ROW: Partial<Record<Action, number>> = {
   walk: 1, run: 1, read: 1, dig: 1, sneak: 1, sit: 1, wave: 1, scratch: 1, look: 1, wink: 1, fish: 1,
-  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2, fight: 1, cast: 1, crouch: 1, drowsy: 1,
+  cheer: 1, yawn: 1, alert: 2, fly: 2, carry: 3, nod: 1, dance: 1, flag: 2, listen: 1, juggle: 2, fight: 1, cast: 1, crouch: 1, drowsy: 1, pin: 1, stuck: 1,
 }
 /** Three or more helpers out: Claude is the boss, collar and tie under the eyes. */
 const TIE: Sprite = ['...WrW...', '....r....']
@@ -1082,6 +1100,8 @@ const GLYPHS: Record<Action, readonly string[]> = {
   stretch: ['\\o/'],
   hatch: ['◯', '◔', '◑', '◕'],
   fight: ['⚔', '†'],
+  pin: ['¶'],
+  stuck: ['☁', '☈'],
   cast: ['✦', '✧'],
 }
 
